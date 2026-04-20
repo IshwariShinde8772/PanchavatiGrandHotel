@@ -1,0 +1,69 @@
+@import "react-datepicker/dist/react-datepicker.css";
+@import "swiper/css";
+@import "swiper/css/pagination";
+@import "leaflet/dist/leaflet.css";
+@import "yet-another-react-lightbox/styles.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #0D1B15;
+  background: #ffffff;
+  font-family: "Inter", sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+  @apply overflow-x-hidden;
+}
+
+body {
+  @apply bg-white text-darkText antialiased overflow-x-hidden;
+  font-feature-settings: "cv11", "ss01";
+}
+
+#root {
+  min-height: 100vh;
+  @apply flex flex-col;
+}
+
+@layer components {
+  .container-shell {
+    @apply mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-12;
+  }
+
+  .section-card {
+    @apply rounded-[32px] border border-divider/40 bg-white transition-all duration-500 hover:shadow-xl hover:-translate-y-1;
+  }
+
+  .pattern-panel {
+    @apply bg-primaryLight/20;
+  }
+
+  .input-standard {
+    @apply w-full rounded-2xl border-2 border-divider bg-white px-5 py-3.5 text-sm transition-all focus:border-vineyard focus:outline-none focus:ring-4 focus:ring-vineyard/5;
+  }
+
+  .btn-hover-effect {
+    @apply transition-all duration-300 hover:scale-[1.02] active:scale-[0.98];
+  }
+}
+
+/* Custom Scrollbar for Premium Feel */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+::-webkit-scrollbar-thumb {
+  background: #0A4D34;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #EF6C00;
+}
+
+

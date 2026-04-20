@@ -1,0 +1,10 @@
+<svg width="800" height="520" viewBox="0 0 800 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="520" rx="32" fill="#FEF0E6"/>
+  <rect x="100" y="180" width="600" height="180" rx="24" fill="#C0714A"/>
+  <rect x="150" y="150" width="220" height="100" rx="16" fill="#FFF8E1"/>
+  <rect x="400" y="120" width="220" height="140" rx="24" fill="#2C5F8A"/>
+  <circle cx="612" cy="154" r="18" fill="#C8960C"/>
+  <path d="M120 380H680" stroke="#7B1F1F" stroke-width="12" stroke-linecap="round"/>
+  <text x="400" y="460" text-anchor="middle" fill="#7B1F1F" font-size="34" font-family="Georgia">Panchavati Grand</text>
+</svg>
+
