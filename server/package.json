@@ -1,0 +1,42 @@
+{
+  "name": "panchavati-grand-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "seed": "node seeders/seed.js",
+    "reset-db": "node scripts/resetDb.js",
+    "lint": "node -e \"console.log('Server lint placeholder')\""
+  },
+  "dependencies": {
+    "axios": "^1.8.1",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.5.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-async-errors": "^3.1.1",
+    "express-rate-limit": "^7.5.0",
+    "express-session": "^1.19.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.11.5",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.10.0",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "pdfkit": "^0.15.1",
+    "razorpay": "^2.9.4",
+    "sequelize": "^6.37.5",
+    "uuid": "^11.1.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
