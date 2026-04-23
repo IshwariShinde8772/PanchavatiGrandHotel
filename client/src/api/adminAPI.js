@@ -38,5 +38,7 @@ export const adminAPI = {
 
   // Notifications
   sendNotification: (payload) => axiosInstance.post("/admin/notifications", payload).then((res) => res.data),
-  listNotifications: () => axiosInstance.get("/admin/notifications").then((res) => res.data),
+  listNotifications: (params) => axiosInstance.get("/admin/notifications", { params }).then((res) => res.data),
+  markNotificationRead: (id) => axiosInstance.patch(`/admin/notifications/${id}/read`).then((res) => res.data),
+  deleteNotification: (id) => axiosInstance.delete(`/admin/notifications/${id}`).then((res) => res.data),
 };

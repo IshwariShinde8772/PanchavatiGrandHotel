@@ -119,7 +119,7 @@ export default function ManageStaff() {
       <PageHeader 
         eyebrow="Manage Staff" 
         title="Team roster and account controls" 
-        description="Create, edit, deactivate, and reset credentials for hotel staff. Receptionists and managers can log in, while housekeeping staff are assigned from the receptionist desk." 
+        description="Create, edit, deactivate, and reset credentials for hotel staff. Receptionists/managers use the desk portal, and housekeeping/kitchen/server teams use the worker portal." 
         actions={<Button onClick={handleOpenAdd}>Add Staff</Button>} 
       />
       
@@ -173,6 +173,8 @@ export default function ManageStaff() {
                 options={[
                   { label: "Receptionist", value: "receptionist" },
                   { label: "Housekeeping", value: "housekeeping" },
+                  { label: "Kitchen", value: "kitchen" },
+                  { label: "Server", value: "server" },
                   { label: "Manager", value: "manager" }
                 ]}
               />
@@ -186,7 +188,7 @@ export default function ManageStaff() {
                     onChange={(e) => setForm({ ...form, password: e.target.value })} 
                   />
                   <p className="mt-1 text-xs text-mutedText">
-                    Password must be at least 8 characters with uppercase, lowercase, and number. Housekeeping staff are assigned by reception and do not use a separate portal.
+                    Password must be at least 8 characters with uppercase, lowercase, and number.
                   </p>
                 </div>
               )}

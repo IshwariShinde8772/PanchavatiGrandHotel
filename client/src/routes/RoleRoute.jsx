@@ -4,7 +4,7 @@ import { useAuthStore } from "../store/authStore";
 function dashboardPath(role) {
   if (role === "admin") return "/admin";
   if (["receptionist", "manager"].includes(role)) return "/receptionist";
-  if (["housekeeping", "kitchen", "server"].includes(role)) return "/login";
+  if (["housekeeping", "kitchen", "server"].includes(role)) return "/worker";
   return "/customer";
 }
 

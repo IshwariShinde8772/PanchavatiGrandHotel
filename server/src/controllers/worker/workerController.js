@@ -1,15 +1,28 @@
-const { Task, MaintenanceLog, Staff } = require("../../../models");
+const { Task, MaintenanceLog, Staff, Room } = require("../../../models");
 const { buildMaintenancePayload, serializeMaintenanceLog } = require("../../services/maintenanceService");
+
+const NEXT_STATUS = {
+  pending: "in_progress",
+  in_progress: "done",
+  done: null,
+};
 
 async function getMyTasks(req, res) {
   const tasks = await Task.findAll({
     where: { staff_id: req.user.id },
+    include: [{ model: Room, as: "room", attributes: ["id", "room_number", "name"], required: false }],
     order: [["due_time", "ASC"]],
   });
 
   return res.json({
     success: true,
-    data: tasks,
+    data: tasks.map((task) => {
+      const plain = task.get({ plain: true });
+      return {
+        ...plain,
+        room_number: plain.room?.room_number || plain.room_number || null,
+      };
+    }),
     total: tasks.length,
     page: 1,
     limit: tasks.length || 10,
@@ -25,10 +38,25 @@ async function updateTaskStatus(req, res) {
     return res.status(404).json({ success: false, error: "Task not found" });
   }
 
+  const requestedStatus = req.body.status;
+  if (requestedStatus && !["pending", "in_progress", "done"].includes(requestedStatus)) {
+    return res.status(400).json({ success: false, error: "Invalid task status" });
+  }
+
+  if (requestedStatus && requestedStatus !== task.status) {
+    const expectedNext = NEXT_STATUS[task.status];
+    if (requestedStatus !== expectedNext) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid status transition. ${task.status} can only move to ${expectedNext || "no further state"}`,
+      });
+    }
+  }
+
   await task.update({
-    status: req.body.status,
+    status: requestedStatus || task.status,
     notes: req.body.notes || task.notes,
-    completed_at: req.body.status === "done" ? new Date() : task.completed_at,
+    completed_at: requestedStatus === "done" ? new Date() : task.completed_at,
   });
 
   return res.json({

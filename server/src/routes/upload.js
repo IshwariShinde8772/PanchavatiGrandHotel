@@ -1,96 +1,165 @@
 const express = require("express");
-const multer = require("multer");
-const path = require("path");
 const fs = require("fs");
-const uploadsDir = require("../bootstrap/database").uploadsDir;
+const path = require("path");
+const multer = require("multer");
 const { uploadImage } = require("../controllers/upload/uploadController");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleGuard = require("../middleware/roleGuard");
+const { uploadsDir } = require("../bootstrap/database");
 
 const router = express.Router();
 
-// Ensure uploads directory exists with error handling
-try {
+function ensureUploadsDirectory() {
   if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true, mode: 0o777 });
-    console.log(`📁 Created uploads directory: ${uploadsDir}`);
-  } else {
-    // Verify directory is writable
-    fs.accessSync(uploadsDir, fs.constants.W_OK);
-    console.log(`✅ Uploads directory verified: ${uploadsDir}`);
+    fs.mkdirSync(uploadsDir, { recursive: true, mode: 0o755 });
   }
-} catch (err) {
-  console.error(`❌ Error with uploads directory: ${err.message}`);
+
+  fs.accessSync(uploadsDir, fs.constants.W_OK);
+}
+
+function detectImageTypeFromMagicBytes(filePath) {
+  const descriptor = fs.openSync(filePath, "r");
+  const header = Buffer.alloc(12);
+
+  try {
+    fs.readSync(descriptor, header, 0, header.length, 0);
+  } finally {
+    fs.closeSync(descriptor);
+  }
+
+  const isJpeg = header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  if (isJpeg) {
+    return "image/jpeg";
+  }
+
+  const isPng =
+    header[0] === 0x89 &&
+    header[1] === 0x50 &&
+    header[2] === 0x4e &&
+    header[3] === 0x47 &&
+    header[4] === 0x0d &&
+    header[5] === 0x0a &&
+    header[6] === 0x1a &&
+    header[7] === 0x0a;
+  if (isPng) {
+    return "image/png";
+  }
+
+  const isWebp =
+    header[0] === 0x52 &&
+    header[1] === 0x49 &&
+    header[2] === 0x46 &&
+    header[3] === 0x46 &&
+    header[8] === 0x57 &&
+    header[9] === 0x45 &&
+    header[10] === 0x42 &&
+    header[11] === 0x50;
+  if (isWebp) {
+    return "image/webp";
+  }
+
+  return null;
+}
+
+function deleteUploadedFile(filePath) {
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (error) {
+    console.error(`Failed to delete invalid uploaded file: ${error.message}`);
+  }
+}
+
+function validateImageSignature(req, res, next) {
+  if (!req.file) {
+    return next();
+  }
+
+  const detectedType = detectImageTypeFromMagicBytes(req.file.path);
+  const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+  if (!detectedType || !allowedMimeTypes.has(detectedType)) {
+    deleteUploadedFile(req.file.path);
+    return res.status(400).json({
+      success: false,
+      error: "Invalid image file signature. Only JPEG, PNG, and WebP are allowed.",
+    });
+  }
+
+  req.file.mimetype = detectedType;
+  return next();
+}
+
+try {
+  ensureUploadsDirectory();
+} catch (error) {
+  console.error(`Failed to initialize uploads directory: ${error.message}`);
 }
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Verify directory exists and is writable before saving
     try {
-      if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-      }
-      fs.accessSync(uploadsDir, fs.constants.W_OK);
+      ensureUploadsDirectory();
       cb(null, uploadsDir);
-    } catch (err) {
-      console.error(`❌ Destination error: ${err.message}`);
-      cb(new Error(`Upload directory not writable: ${err.message}`));
+    } catch (error) {
+      cb(new Error(`Upload directory is not writable: ${error.message}`));
     }
   },
   filename: (req, file, cb) => {
-    // Generate unique filename: timestamp-random-originalname
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const ext = path.extname(file.originalname).toLowerCase();
-    const newFilename = `room-${uniqueSuffix}${ext}`;
-    console.log(`📤 Generating filename for upload: ${newFilename}`);
-    cb(null, newFilename);
+    cb(null, `room-${uniqueSuffix}${ext}`);
   },
 });
 
 const upload = multer({
-  storage: storage,
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    console.log(`📥 File filter check: ${file.originalname}`);
-    console.log(`   MIME Type: ${file.mimetype}`);
-    
-    // Validate file type - fixed to handle proper MIME types
-    const allowedMimeTypes = /image\/(jpeg|jpg|png|webp)/i;
+    const allowedMimeTypes = /^image\/(jpeg|jpg|png|webp)$/i;
     const allowedExtensions = /\.(jpeg|jpg|png|webp)$/i;
-    
-    const hasMimeType = allowedMimeTypes.test(file.mimetype);
-    const hasExtension = allowedExtensions.test(file.originalname);
+    const hasMimeType = allowedMimeTypes.test(file.mimetype || "");
+    const hasExtension = allowedExtensions.test(file.originalname || "");
 
-    if (hasMimeType && hasExtension) {
-      console.log(`✅ File validation passed: ${file.originalname} (MIME: ${file.mimetype})`);
-      return cb(null, true);
-    } else {
-      const errorMsg = `Only images allowed (JPEG/PNG/WebP). Got: ${file.mimetype}`;
-      console.error(`❌ File rejected: ${file.originalname} - ${errorMsg}`);
-      cb(new Error(errorMsg));
+    if (!hasMimeType || !hasExtension) {
+      return cb(new Error("Only JPEG, PNG, and WebP image files are allowed"));
     }
+
+    return cb(null, true);
   },
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
 
-router.post("/image", authMiddleware, roleGuard(["admin", "receptionist"]), upload.single("image"), uploadImage);
+router.post(
+  "/image",
+  authMiddleware,
+  roleGuard(["admin", "receptionist"]),
+  upload.single("image"),
+  validateImageSignature,
+  uploadImage
+);
 
-// Error handling middleware for multer errors
 router.use((error, req, res, next) => {
-  if (error instanceof multer.MulterError) {
-    if (error.code === "LIMIT_FILE_SIZE") {
-      return res.status(400).json({
-        success: false,
-        error: "File size exceeds 5MB limit"
-      });
-    }
-  }
-  if (error) {
+  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({
       success: false,
-      error: error.message || "Upload failed"
+      error: "File size exceeds 5MB limit",
     });
   }
-  next();
+
+  if (error) {
+    if (req.file?.path) {
+      deleteUploadedFile(req.file.path);
+    }
+
+    return res.status(400).json({
+      success: false,
+      error: error.message || "Upload failed",
+    });
+  }
+
+  return next();
 });
 
 module.exports = router;
+

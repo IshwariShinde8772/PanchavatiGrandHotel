@@ -87,6 +87,7 @@ export default function Login() {
       if (!from || from === "/login") {
         if (loggedInRole === "admin") from = "/admin";
         else if (["receptionist", "manager"].includes(loggedInRole)) from = "/receptionist";
+        else if (["housekeeping", "kitchen", "server"].includes(loggedInRole)) from = "/worker";
         else from = "/";
       }
       navigate(from, { replace: true });
@@ -110,7 +111,7 @@ export default function Login() {
             Welcome Back
           </h1>
           <p className="mt-2 text-sm" style={{ color: "#526359" }}>
-            Use your saved customer, admin, or receptionist account credentials.
+            Use your saved customer, admin, receptionist, or worker account credentials.
           </p>
         </div>
 

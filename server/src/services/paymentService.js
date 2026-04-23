@@ -18,7 +18,11 @@ async function createOrder({ amount, currency = "INR", receipt }) {
 
 function verifySignature({ orderId, paymentId, signature }) {
   if (!env.razorpay.keySecret) {
-    return true;
+    return false;
+  }
+
+  if (!orderId || !paymentId || !signature) {
+    return false;
   }
 
   const generated = crypto

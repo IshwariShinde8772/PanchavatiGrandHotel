@@ -8,6 +8,7 @@ export const authAPI = {
   registerCustomer: (payload) => axiosInstance.post("/auth/customer/register", payload).then((res) => res.data),
   loginAdmin: (payload) => axiosInstance.post("/auth/admin/login", payload).then((res) => res.data),
   loginStaff: (payload) => axiosInstance.post("/auth/staff/login", payload).then((res) => res.data),
+  oauthExchange: () => axiosInstance.get("/auth/oauth/exchange", { withCredentials: true }).then((res) => res.data),
   me: () => axiosInstance.get("/customer/me").then((res) => res.data),
   updateProfile: (payload) => axiosInstance.put("/customer/profile", payload).then((res) => res.data),
   getNotifications: () => axiosInstance.get("/customer/notifications").then((res) => res.data),
