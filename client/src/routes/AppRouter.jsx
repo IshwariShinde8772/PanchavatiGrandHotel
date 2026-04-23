@@ -53,6 +53,10 @@ import SettingsLive from "../pages/admin/SettingsLive";
 import SeasonalPricing from "../pages/admin/SeasonalPricing";
 import AdminOffers from "../pages/admin/Offers";
 import AdminNotifications from "../pages/admin/Notifications";
+import WorkerLayout from "../pages/worker/WorkerLayout";
+import MyTasks from "../pages/worker/MyTasks";
+import ReportIssue from "../pages/worker/ReportIssue";
+import MySchedule from "../pages/worker/MySchedule";
 
 export default function AppRouter() {
   return (
@@ -121,6 +125,14 @@ export default function AppRouter() {
             <Route path="seasonal-pricing" element={<SeasonalPricing />} />
             <Route path="offers" element={<AdminOffers />} />
             <Route path="notifications" element={<AdminNotifications />} />
+          </Route>
+        </Route>
+
+        <Route element={<RoleRoute allowedRoles={["housekeeping", "kitchen", "server"]} />}>
+          <Route path="/worker" element={<WorkerLayout />}>
+            <Route index element={<MyTasks />} />
+            <Route path="report-issue" element={<ReportIssue />} />
+            <Route path="schedule" element={<MySchedule />} />
           </Route>
         </Route>
 

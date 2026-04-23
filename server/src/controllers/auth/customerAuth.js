@@ -70,9 +70,7 @@ async function sendOtpCode(req, res) {
       error: "Failed to send OTP. Please try again in a moment.",
     });
   }
-
-  console.log(`📱 OTP sent to ${phone}. OTP: ${otp}`);
-
+  console.log(`OTP sent to ${phone}`);
   return res.json({
     success: true,
     data: {
@@ -271,27 +269,24 @@ async function forgotPassword(req, res) {
   const { email } = normalizeCustomerPayload(req.body);
   const customer = await Customer.findOne({ where: { email, is_deleted: false } });
 
-  if (!customer) {
-    return res.status(404).json({ success: false, error: "Customer not found" });
+  if (customer) {
+    const otp = generateOtp();
+    await customer.update({
+      otp_code: await hashOtp(otp),
+      otp_expires_at: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    await sendEmail({
+      to: email,
+      subject: "Password reset OTP",
+      html: `<p>Your OTP for password reset is <strong>${otp}</strong>.</p>`,
+      text: `OTP: ${otp}`,
+    });
   }
-
-  const otp = generateOtp();
-  await customer.update({
-    otp_code: await hashOtp(otp),
-    otp_expires_at: new Date(Date.now() + 10 * 60 * 1000),
-  });
-
-  await sendEmail({
-    to: email,
-    subject: "Password reset OTP",
-    html: `<p>Your OTP for password reset is <strong>${otp}</strong>.</p>`,
-    text: `OTP: ${otp}`,
-  });
 
   return res.json({
     success: true,
-    data: { otp: process.env.NODE_ENV === "production" ? undefined : otp },
-    message: "Password reset OTP sent",
+    message: "If the account exists, a password reset OTP has been sent",
   });
 }
 
@@ -556,3 +551,4 @@ module.exports = {
   getCustomerDetail,
   toggleCustomerDeleted,
 };
+

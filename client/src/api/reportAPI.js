@@ -4,9 +4,9 @@ export const reportAPI = {
   adminDashboard: () => axiosInstance.get("/admin/dashboard").then((res) => res.data),
   receptionistDashboard: () => axiosInstance.get("/receptionist/dashboard").then((res) => res.data),
   report: (params) => axiosInstance.get("/admin/reports", { params }).then((res) => res.data),
-  exportCsv: () =>
+  exportCsv: (params) =>
     axiosInstance
-      .get("/admin/reports/bookings.csv", { responseType: "blob" })
+      .get("/admin/reports/bookings.csv", { params, responseType: "blob" })
       .then((res) => {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const link = document.createElement("a");

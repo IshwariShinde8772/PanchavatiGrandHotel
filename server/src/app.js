@@ -13,6 +13,7 @@ const publicRoutes = require("./routes/public");
 const customerRoutes = require("./routes/customer");
 const receptionistRoutes = require("./routes/receptionist");
 const adminRoutes = require("./routes/admin");
+const workerRoutes = require("./routes/worker");
 const uploadRoutes = require("./routes/upload");
 const socialAuthRoutes = require("./routes/auth/socialAuth");
 const authMiddleware = require("./middleware/authMiddleware");
@@ -58,6 +59,7 @@ app.use("/api/auth", socialAuthRoutes);
 app.use("/api/customer", authMiddleware, roleGuard(["customer"]), customerRoutes);
 app.use("/api/receptionist", authMiddleware, roleGuard(["receptionist", "manager"]), receptionistRoutes);
 app.use("/api/admin", authMiddleware, roleGuard(["admin"]), adminRoutes);
+app.use("/api/worker", authMiddleware, roleGuard(["housekeeping", "kitchen", "server"]), workerRoutes);
 
 cron.schedule("0 2 1 * *", () => {
   console.log("Monthly report automation placeholder triggered");

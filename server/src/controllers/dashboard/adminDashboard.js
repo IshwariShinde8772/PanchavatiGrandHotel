@@ -8,15 +8,16 @@ const {
   Inventory,
   Room,
 } = require("../../../models");
-const { getRevenueSeries, getMonthlyReport } = require("../../services/reportService");
+const { getReport } = require("../../services/reportService");
 
 async function getAdminDashboard(req, res) {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const [report, revenueSeries] = await Promise.all([
-    getMonthlyReport(now.getUTCFullYear(), now.getUTCMonth() + 1),
-    getRevenueSeries(),
+  const [reportData] = await Promise.all([
+    getReport({ year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 }),
   ]);
+  const report = reportData.summary;
+  const revenueSeries = reportData.revenueSeries;
 
   const [activeStaff, openMaintenance, newEnquiries, inventory, rooms, recentBookings, pendingFeedback] = await Promise.all([
     Staff.count({ where: { is_active: true } }),
@@ -46,7 +47,7 @@ async function getAdminDashboard(req, res) {
         new_enquiries: newEnquiries,
       },
       revenueSeries,
-      occupancy,
+      occupancy: reportData.occupancy || occupancy,
       recentBookings,
       alerts: {
         low_inventory: lowStockItems,

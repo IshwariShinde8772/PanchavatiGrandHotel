@@ -1,29 +1,19 @@
-const { Booking } = require("../../../models");
-const { getMonthlyReport, getRevenueSeries } = require("../../services/reportService");
+const { getReport: buildReportData, getReportCsvRows } = require("../../services/reportService");
 const { toCsv } = require("../../utils/csvExport");
 
 async function getReport(req, res) {
-  const now = new Date();
-  const year = Number(req.query.year || now.getUTCFullYear());
-  const month = Number(req.query.month || now.getUTCMonth() + 1);
-
-  const [summary, revenueSeries] = await Promise.all([
-    getMonthlyReport(year, month),
-    getRevenueSeries(),
-  ]);
+  const data = await buildReportData(req.query);
 
   return res.json({
     success: true,
-    data: {
-      summary,
-      revenueSeries,
-    },
+    data,
+    message: "Report generated successfully",
   });
 }
 
 async function exportBookingsCsv(req, res) {
-  const bookings = await Booking.findAll({ raw: true });
-  const csv = toCsv(bookings);
+  const rows = await getReportCsvRows(req.query);
+  const csv = toCsv(rows);
 
   res.setHeader("Content-Type", "text/csv");
   res.setHeader("Content-Disposition", "attachment; filename=bookings.csv");

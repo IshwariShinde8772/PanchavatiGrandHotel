@@ -15,6 +15,12 @@ const { listCustomers, getCustomerDetail, toggleCustomerDeleted } = require("../
 const { getSettings, updateSettings } = require("../controllers/settings/settingsController");
 const { listSeasonalPrices, createSeasonalPrice, updateSeasonalPrice, deleteSeasonalPrice } = require("../controllers/room/seasonalController");
 const { listOffers, createOffer, updateOffer, deleteOffer } = require("../controllers/room/offerController");
+const {
+  listNotifications,
+  createNotification,
+  markNotificationRead,
+  deleteNotification,
+} = require("../controllers/notification/notificationController");
 
 const router = express.Router();
 
@@ -68,6 +74,11 @@ router.get("/offers", listOffers);
 router.post("/offers", createOffer);
 router.put("/offers/:id", updateOffer);
 router.delete("/offers/:id", deleteOffer);
+
+router.get("/notifications", listNotifications);
+router.post("/notifications", createNotification);
+router.patch("/notifications/:id/read", markNotificationRead);
+router.delete("/notifications/:id", deleteNotification);
 
 router.get("/settings", getSettings);
 router.put("/settings", updateSettings);

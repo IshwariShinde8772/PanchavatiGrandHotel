@@ -3,7 +3,7 @@ const { Admin, Customer, Staff } = require("../../../models");
 const { sanitizeUser } = require("../../utils/serializers");
 const { signToken } = require("../../utils/token");
 
-const portalStaffRoles = new Set(["receptionist", "manager"]);
+const portalStaffRoles = new Set(["receptionist", "manager", "housekeeping", "kitchen", "server"]);
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -40,7 +40,7 @@ async function login(req, res) {
     if (!portalStaffRoles.has(staff.role)) {
       return res.status(403).json({
         success: false,
-        error: "This staff role does not have a separate login portal. Cleaning and support work is managed from the receptionist desk.",
+        error: "This staff role is not allowed to access the portal",
       });
     }
 

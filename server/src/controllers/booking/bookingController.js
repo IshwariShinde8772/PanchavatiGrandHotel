@@ -20,6 +20,7 @@ const { generateBill } = require("../../services/billService");
 const { sendBookingConfirmation } = require("../../services/emailService");
 const { createQrTransaction, serializeTransaction } = require("../../services/transactionService");
 const { getPagination } = require("../../utils/pagination");
+const env = require("../../config/env");
 
 function ensureBookingDates(checkIn, checkOut) {
   const inDate = parseDateInput(checkIn);
@@ -201,6 +202,15 @@ async function createBooking(req, res) {
 
 async function verifyBookingPayment(req, res) {
   const { booking_id, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+  if (!env.razorpay.keyId || !env.razorpay.keySecret) {
+    return res.status(503).json({
+      success: false,
+      error: "Payment verification is temporarily unavailable",
+      message: "Razorpay verification is not configured on the server",
+    });
+  }
+
   const booking = await Booking.findByPk(booking_id, {
     include: [
       { model: Customer, as: "customer" },
@@ -210,6 +220,15 @@ async function verifyBookingPayment(req, res) {
 
   if (!booking) {
     return res.status(404).json({ success: false, error: "Booking not found" });
+  }
+
+  const alreadyVerified = booking.payment_status === "paid" && booking.status === "confirmed";
+
+  if (alreadyVerified && booking.razorpay_payment_id && booking.razorpay_payment_id !== razorpay_payment_id) {
+    return res.status(409).json({
+      success: false,
+      error: "Booking is already verified with a different payment reference",
+    });
   }
 
   const valid = verifySignature({
@@ -222,12 +241,14 @@ async function verifyBookingPayment(req, res) {
     return res.status(400).json({ success: false, error: "Payment verification failed" });
   }
 
-  await booking.update({
-    status: "confirmed",
-    payment_status: "paid",
-    payment_method: "online",
-    razorpay_payment_id,
-  });
+  if (!alreadyVerified) {
+    await booking.update({
+      status: "confirmed",
+      payment_status: "paid",
+      payment_method: "online",
+      razorpay_payment_id,
+    });
+  }
 
   const [paymentRecord] = await PaymentTransaction.findOrCreate({
     where: {
@@ -256,30 +277,52 @@ async function verifyBookingPayment(req, res) {
     });
   }
 
-  await Notification.bulkCreate([
-    {
-      target_role: "admin",
-      title: "New Paid Booking",
-      message: `${booking.booking_ref} has been paid online.`,
-      type: "payment",
-    },
-    {
-      target_role: "receptionist",
-      title: "New Confirmed Booking",
-      message: `${booking.booking_ref} is ready for arrival.`,
-      type: "booking",
-    },
-    {
-      target_role: "customer",
-      target_id: booking.customer_id,
-      title: "Booking Confirmed",
-      message: `Your booking ${booking.booking_ref} is confirmed.`,
-      type: "booking",
-    },
-  ]);
+  if (!alreadyVerified) {
+    const notificationsToEnsure = [
+      {
+        target_role: "admin",
+        target_id: null,
+        title: "New Paid Booking",
+        message: `${booking.booking_ref} has been paid online.`,
+        type: "payment",
+      },
+      {
+        target_role: "receptionist",
+        target_id: null,
+        title: "New Confirmed Booking",
+        message: `${booking.booking_ref} is ready for arrival.`,
+        type: "booking",
+      },
+      {
+        target_role: "customer",
+        target_id: booking.customer_id,
+        title: "Booking Confirmed",
+        message: `Your booking ${booking.booking_ref} is confirmed.`,
+        type: "booking",
+      },
+    ];
 
-  const settings = await HotelSetting.findByPk(1);
-  await sendBookingConfirmation(booking, booking.customer, settings);
+    for (const item of notificationsToEnsure) {
+      const where = {
+        target_role: item.target_role,
+        title: item.title,
+        message: item.message,
+        type: item.type,
+      };
+
+      if (item.target_id) {
+        where.target_id = item.target_id;
+      }
+
+      const existing = await Notification.findOne({ where });
+      if (!existing) {
+        await Notification.create(item);
+      }
+    }
+
+    const settings = await HotelSetting.findByPk(1);
+    await sendBookingConfirmation(booking, booking.customer, settings);
+  }
 
   return res.json({
     success: true,
@@ -287,7 +330,7 @@ async function verifyBookingPayment(req, res) {
       booking,
       bookingRef: booking.booking_ref,
     },
-    message: "Payment verified successfully",
+    message: alreadyVerified ? "Payment already verified" : "Payment verified successfully",
   });
 }
 
@@ -403,17 +446,25 @@ async function listAllBookings(req, res) {
   const { page, limit, offset } = getPagination(req.query);
   const where = {};
   const roomWhere = {};
+  const parseList = (value) =>
+    String(value || "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
 
   if (req.query.status) {
-    where.status = req.query.status;
+    const statuses = parseList(req.query.status);
+    where.status = statuses.length > 1 ? { [Op.in]: statuses } : statuses[0];
   }
 
   if (req.query.payment_status) {
-    where.payment_status = req.query.payment_status;
+    const paymentStatuses = parseList(req.query.payment_status);
+    where.payment_status = paymentStatuses.length > 1 ? { [Op.in]: paymentStatuses } : paymentStatuses[0];
   }
 
   if (req.query.booked_by) {
-    where.booked_by = req.query.booked_by;
+    const bookedByValues = parseList(req.query.booked_by);
+    where.booked_by = bookedByValues.length > 1 ? { [Op.in]: bookedByValues } : bookedByValues[0];
   }
 
   if (req.query.q) {
@@ -605,8 +656,12 @@ async function checkOutBooking(req, res) {
       return res.status(404).json({ success: false, error: "Booking not found" });
     }
 
-    const extras = req.body.extras || [];
-    const extraCharges = extras.reduce((sum, item) => sum + Number(item.amount), 0);
+    const extras = (req.body.extras || []).map((item) => ({
+      ...item,
+      title: item.title || item.label || "Extra Charge",
+      amount: Number(item.amount || 0),
+    }));
+    const extraCharges = extras.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     await booking.update({
       status: "checked_out",
       actual_checkout_time: new Date(),

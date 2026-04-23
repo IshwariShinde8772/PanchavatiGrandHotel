@@ -14,3 +14,10 @@ export function useReceptionistDashboard() {
     queryFn: async () => (await reportAPI.receptionistDashboard()).data,
   });
 }
+
+export function useAdminReport(filters) {
+  return useQuery({
+    queryKey: ["admin-report", filters],
+    queryFn: async () => (await reportAPI.report(filters)).data,
+  });
+}

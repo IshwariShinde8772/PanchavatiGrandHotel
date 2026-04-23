@@ -58,8 +58,11 @@ const checkInSchema = z.object({
 
 const checkOutSchema = z.object({
   extras: z.array(z.object({
-    title: z.string().min(1),
+    title: z.string().min(1).optional(),
+    label: z.string().min(1).optional(),
     amount: z.coerce.number().min(0),
+  }).refine((item) => item.title || item.label, {
+    message: "Each extra must include a title or label",
   })).default([]),
   payment_method: z.string().optional(),
   payment_status: z.string().optional(),

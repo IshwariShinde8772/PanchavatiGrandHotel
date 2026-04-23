@@ -2,6 +2,14 @@ import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuthStore } from "../../store/authStore";
+import { authAPI } from "../../api/authAPI";
+
+function redirectPathForRole(role) {
+  if (role === "admin") return "/admin";
+  if (["receptionist", "manager"].includes(role)) return "/receptionist";
+  if (["housekeeping", "kitchen", "server"].includes(role)) return "/worker";
+  return "/customer";
+}
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -10,38 +18,29 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      const token = searchParams.get("token");
       const provider = searchParams.get("provider");
       const error = searchParams.get("error");
 
       if (error) {
         toast.error(`Authentication failed: ${error}`);
-        navigate("/login");
+        navigate("/login", { replace: true });
         return;
       }
 
-      if (token) {
-        try {
-          // Decode token to get user info (simple decode, not verify)
-          const payload = JSON.parse(atob(token.split(".")[1]));
-          const user = {
-            id: payload.id,
-            role: payload.role,
-            name: payload.name,
-            phone: payload.phone,
-          };
+      try {
+        const response = await authAPI.oauthExchange();
+        const payload = response?.data ?? response;
 
-          setAuth({ token, user });
-          toast.success(`Successfully signed in with ${provider}!`);
-          navigate("/customer");
-        } catch (err) {
-          console.error("Token parsing error:", err);
-          toast.error("Authentication failed");
-          navigate("/login");
+        if (!payload?.token || !payload?.user) {
+          throw new Error("Missing auth payload");
         }
-      } else {
-        toast.error("No authentication token received");
-        navigate("/login");
+
+        setAuth({ token: payload.token, user: payload.user });
+        toast.success(`Successfully signed in with ${provider || "Google"}`);
+        navigate(redirectPathForRole(payload.user.role), { replace: true });
+      } catch (exchangeError) {
+        toast.error(exchangeError?.response?.data?.error || "Authentication failed");
+        navigate("/login", { replace: true });
       }
     };
 
@@ -51,9 +50,10 @@ export default function AuthCallback() {
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="text-center">
-        <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 mx-auto"></div>
+        <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
         <p className="text-gray-600">Completing sign in...</p>
       </div>
     </div>
   );
 }
+

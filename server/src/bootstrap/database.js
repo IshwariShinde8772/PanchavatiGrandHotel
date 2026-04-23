@@ -53,10 +53,23 @@ async function syncDatabase(options = {}) {
   const shouldForce = options.force ?? env.db.forceSync;
   const shouldAlter = shouldForce ? false : (options.alter ?? env.db.syncAlter);
   const syncOptions = shouldForce ? { force: true } : shouldAlter ? { alter: true } : undefined;
+  const shouldDisableForeignKeys = shouldForce && sequelize.getDialect() === "mysql";
 
   ensureUploadDirectory();
   await sequelize.authenticate();
-  await sequelize.sync(syncOptions);
+
+  if (shouldDisableForeignKeys) {
+    await sequelize.query("SET FOREIGN_KEY_CHECKS = 0");
+  }
+
+  try {
+    await sequelize.sync(syncOptions);
+  } finally {
+    if (shouldDisableForeignKeys) {
+      await sequelize.query("SET FOREIGN_KEY_CHECKS = 1");
+    }
+  }
+
   await ensureBaseRecords();
 
   return {
