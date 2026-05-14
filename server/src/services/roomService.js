@@ -3,6 +3,13 @@ const { Room, Booking } = require("../../models");
 const env = require("../config/env");
 const { isDateInRange } = require("../utils/dateHelpers");
 
+function getPublicBackendUrl() {
+  return String(env.backendUrl || "")
+    .trim()
+    .replace(/\/+$/g, "")
+    .replace(/\/api$/i, "");
+}
+
 function normalizeStringArray(value) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
@@ -38,11 +45,13 @@ function resolveRoomAssetUrl(value) {
   }
 
   if (normalized.startsWith("/uploads/")) {
-    return `${env.backendUrl}${normalized}`;
+    const backendUrl = getPublicBackendUrl();
+    return backendUrl ? `${backendUrl}${normalized}` : normalized;
   }
 
   if (normalized.startsWith("uploads/")) {
-    return `${env.backendUrl}/${normalized}`;
+    const backendUrl = getPublicBackendUrl();
+    return backendUrl ? `${backendUrl}/${normalized}` : normalized;
   }
 
   return normalized;
