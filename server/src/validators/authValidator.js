@@ -45,7 +45,7 @@ const customerRegisterSchema = z.object({
   full_name: requiredTrimmed(z.string().min(2)),
   email: optionalTrimmed(z.string().email()),
   phone: optionalPhone,
-  password: z.string().min(8).optional(),
+  password: optionalTrimmed(z.string().min(8)),
 }).refine(
   (data) => data.email || data.phone,
   { message: "Either email or phone is required" }

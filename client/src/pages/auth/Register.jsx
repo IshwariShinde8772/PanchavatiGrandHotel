@@ -6,6 +6,7 @@ import Button from "../../components/common/Button";
 import InputField from "../../components/forms/InputField";
 import { authAPI } from "../../api/authAPI";
 import { useAuthStore } from "../../store/authStore";
+import { isValidPhoneNumber, normalizePhoneNumber } from "../../utils/phone";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -15,27 +16,62 @@ export default function Register() {
     email: "",
     phone: "",
     password: "",
+    confirm_password: "",
   });
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    
-    // Validation
-    if (!form.full_name.trim()) {
+
+    const fullName = form.full_name.trim();
+    const email = form.email.trim().toLowerCase();
+    const phone = normalizePhoneNumber(form.phone);
+    const password = form.password.trim();
+    const confirmPassword = form.confirm_password.trim();
+
+    if (!fullName) {
       toast.error("Full name is required");
       return;
     }
-    if (!form.email.trim() && !form.phone.trim()) {
+
+    if (!email && !phone) {
       toast.error("Email or phone is required");
       return;
     }
-    if (form.email && form.password.length < 8) {
-      toast.error("Password must be at least 8 characters when using email");
+
+    if (form.phone.trim() && !isValidPhoneNumber(phone)) {
+      toast.error("Enter a valid phone number");
+      return;
+    }
+
+    if (email && !password) {
+      toast.error("Password is required when using email registration");
+      return;
+    }
+
+    if (password && password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
+    if ((email || password) && !confirmPassword) {
+      toast.error("Please confirm your password");
+      return;
+    }
+
+    if (password && confirmPassword && password !== confirmPassword) {
+      toast.error("Password and confirm password do not match");
       return;
     }
     
     try {
-      const response = await authAPI.registerCustomer(form);
+      const payload = {
+        full_name: fullName,
+        email: email || undefined,
+        phone: phone || undefined,
+        password: password || undefined,
+      };
+
+      const response = await authAPI.registerCustomer(payload);
       if (response?.data?.token && response?.data?.user) {
         setAuth({ token: response.data.token, user: response.data.user });
       }
@@ -54,7 +90,8 @@ export default function Register() {
         <InputField label="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
         <InputField label="Phone (Optional)" placeholder="+919876543210" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
         <InputField label="Password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
-        <p className="text-xs text-mutedText">Password must be at least 8 characters if using email registration.</p>
+        <InputField label="Confirm Password" type="password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} />
+        <p className="text-xs text-mutedText">Password must be at least 8 characters when using email registration.</p>
         <Button className="w-full" type="submit">Create Account</Button>
         <p className="text-sm text-mutedText">Already have an account? <Link className="text-godavari" to="/login">Login</Link></p>
       </form>

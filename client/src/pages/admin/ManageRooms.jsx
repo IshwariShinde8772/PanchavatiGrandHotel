@@ -23,6 +23,17 @@ const EMPTY_FORM = {
   discount_end: "",
 };
 
+const IMAGE_EXTENSIONS = /\.(avif|bmp|gif|jpe?g|png|svg|webp)(\?.*)?(#.*)?$/i;
+
+function isDirectImageUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) && IMAGE_EXTENSIONS.test(url.pathname);
+  } catch (error) {
+    return false;
+  }
+}
+
 export default function ManageRooms() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
@@ -153,6 +164,16 @@ export default function ManageRooms() {
   const addImageUrl = () => {
     const imageUrl = form.imageInput.trim();
     if (!imageUrl) return;
+
+    if (!isDirectImageUrl(imageUrl)) {
+      toast.error("Please enter a valid direct image URL (http/https ending with an image file extension).");
+      return;
+    }
+
+    if (form.images.includes(imageUrl)) {
+      toast.error("This image URL is already added.");
+      return;
+    }
 
     setForm((prev) => ({
       ...prev,

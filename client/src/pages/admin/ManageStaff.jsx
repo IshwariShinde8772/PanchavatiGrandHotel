@@ -110,7 +110,16 @@ export default function ManageStaff() {
       delete payload.password; // Don't update password on edit
       updateMutation.mutate({ id: editingStaff.id, payload });
     } else {
-      createMutation.mutate(form);
+      const payload = {
+        ...form,
+        password: form.password?.trim() || undefined,
+      };
+
+      if (!payload.password) {
+        delete payload.password;
+      }
+
+      createMutation.mutate(payload);
     }
   };
 
