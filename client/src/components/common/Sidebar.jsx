@@ -1,11 +1,13 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { LogOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../store/authStore";
 
 export default function Sidebar({ items, title, subtitle }) {
   const logout = useAuthStore((state) => state.logout);
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handleLogout = () => {
     logout();
@@ -43,11 +45,10 @@ export default function Sidebar({ items, title, subtitle }) {
           className="flex w-full min-h-12 items-center gap-3 rounded-lg px-4 py-3 text-sm font-bold tracking-wider uppercase transition-colors duration-200 text-white/80 hover:bg-red-500/20 hover:text-white"
         >
           <LogOut size={16} strokeWidth={2} />
-          <span>Log Out</span>
+          <span>{t("common.logout")}</span>
         </button>
       </div>
     </aside>
   );
 }
-
 

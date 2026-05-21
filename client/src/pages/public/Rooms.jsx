@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import PageHeader from "../../components/common/PageHeader";
 import RoomFilters from "../../components/room/RoomFilters";
 import RoomCard from "../../components/room/RoomCard";
@@ -8,6 +9,7 @@ import SkeletonCard from "../../components/common/SkeletonCard";
 import { useRooms } from "../../hooks/useRooms";
 
 export default function Rooms() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState({
     checkIn: searchParams.get("checkIn") || "",
@@ -23,9 +25,9 @@ export default function Rooms() {
   return (
     <div className="container-shell py-10">
       <PageHeader
-        eyebrow="Explore Our Rooms"
-        title="Rooms crafted with Nashik character"
-        description="Filter by views, guest count, category, and stay window to find the right room."
+        eyebrow={t("publicPages.roomsEyebrow")}
+        title={t("publicPages.roomsTitle")}
+        description={t("publicPages.roomsDescription")}
       />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[320px_minmax(0,1fr)]">
@@ -46,4 +48,3 @@ export default function Rooms() {
     </div>
   );
 }
-

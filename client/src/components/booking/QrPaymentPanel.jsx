@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Button from "../common/Button";
 
 function formatTime(seconds) {
@@ -16,7 +17,10 @@ export default function QrPaymentPanel({
   onRegenerate,
   busy = false,
 }) {
+  const { t } = useTranslation();
   const [now, setNow] = useState(Date.now());
+  const displayTitle = title === "Scan QR to Pay" ? t("payment.scanQr") : title;
+  const displaySubtitle = subtitle === "Complete the payment before the timer ends." ? t("payment.completeBeforeTimer") : subtitle;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -32,34 +36,34 @@ export default function QrPaymentPanel({
 
   return (
     <div className="rounded-[28px] border border-divider bg-white p-5">
-      <h3 className="font-heading text-2xl">{title}</h3>
-      <p className="mt-2 text-sm text-mutedText">{subtitle}</p>
+      <h3 className="font-heading text-2xl">{displayTitle}</h3>
+      <p className="mt-2 text-sm text-mutedText">{displaySubtitle}</p>
 
       <div className="mt-4 rounded-2xl bg-saffronLight p-4 text-sm">
-        <p className="font-semibold text-vineyard">Amount: INR {transaction?.amount}</p>
-        <p className="mt-1 text-mutedText">Status: {transaction?.status}</p>
-        <p className="mt-1 text-mutedText">UPI: {transaction?.upi_id || "Not available"}</p>
+        <p className="font-semibold text-vineyard">{t("payment.amount", { amount: transaction?.amount })}</p>
+        <p className="mt-1 text-mutedText">{t("payment.status", { status: transaction?.status })}</p>
+        <p className="mt-1 text-mutedText">{t("payment.upi", { upi: transaction?.upi_id || t("payment.notAvailable") })}</p>
         <p className={`mt-1 font-semibold ${expired ? "text-red-600" : "text-godavari"}`}>
-          Timer: {expired ? "Expired" : formatTime(secondsRemaining)}
+          {t("payment.timer", { value: expired ? t("payment.expired") : formatTime(secondsRemaining) })}
         </p>
       </div>
 
       {!expired && transaction?.qr_image_url ? (
         <div className="mt-5 flex justify-center">
-          <img src={transaction.qr_image_url} alt="Payment QR" className="h-60 w-60 rounded-2xl border border-divider bg-white p-3" />
+          <img src={transaction.qr_image_url} alt={t("payment.qrAlt")} className="h-60 w-60 rounded-2xl border border-divider bg-white p-3" />
         </div>
       ) : (
         <div className="mt-5 rounded-2xl border border-dashed border-red-200 bg-red-50 px-4 py-8 text-center text-sm text-red-600">
-          QR is no longer visible because the timer ended.
+          {t("payment.qrExpired")}
         </div>
       )}
 
       <div className="mt-5 flex flex-wrap gap-3">
         <Button onClick={onConfirm} disabled={busy || expired} className="flex-1">
-          {busy ? "Processing..." : "I Have Paid"}
+          {busy ? t("payment.processing") : t("payment.paid")}
         </Button>
         <Button variant="outline" onClick={onRegenerate} disabled={busy}>
-          Generate New QR
+          {t("payment.generateNew")}
         </Button>
       </div>
     </div>

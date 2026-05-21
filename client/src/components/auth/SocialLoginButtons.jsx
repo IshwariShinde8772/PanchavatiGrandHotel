@@ -1,6 +1,8 @@
 export default function SocialLoginButtons() {
   const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/auth/google`;
+    const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+    const apiOrigin = apiBase.replace(/\/+$/g, "").replace(/\/api$/i, "");
+    window.location.href = `${apiOrigin}/api/auth/google`;
   };
 
   return (
@@ -33,4 +35,3 @@ export default function SocialLoginButtons() {
     </div>
   );
 }
-

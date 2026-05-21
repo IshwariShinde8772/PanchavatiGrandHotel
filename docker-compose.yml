@@ -15,6 +15,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
 
   server:
     build:
@@ -36,6 +37,9 @@ services:
       DB_SYNC_ALTER: "true"
       JWT_SECRET: panchavati_nashik_secret_key_change_this_in_prod
       CLIENT_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:5000
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       - "5000:5000"
     volumes:
@@ -57,3 +61,4 @@ services:
 volumes:
   mysql_data:
   server_uploads:
+

@@ -1,6 +1,7 @@
 import { Heart, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import Badge from "../common/Badge";
 import Button from "../common/Button";
@@ -11,6 +12,7 @@ import { useSaveRoom, useSavedRooms, useRemoveSavedRoom } from "../../hooks/useR
 
 export default function RoomCard({ room, compact = false, onSave }) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const { data: savedRooms } = useSavedRooms();
   const saveRoomMutation = useSaveRoom();
@@ -30,7 +32,7 @@ export default function RoomCard({ room, compact = false, onSave }) {
     if (!user) {
       // Store the room ID to save after login
       sessionStorage.setItem('pendingSaveRoom', room.id.toString());
-      toast.error("Please login to add rooms to your wishlist");
+      toast.error(t("room.loginWishlist"));
       navigate('/auth/login');
       return;
     }
@@ -40,16 +42,16 @@ export default function RoomCard({ room, compact = false, onSave }) {
         // Remove from wishlist
         await removeRoomMutation.mutateAsync(room.id);
         setLiked(false);
-        toast.success("Removed from wishlist");
+        toast.success(t("room.removedWishlist"));
       } else {
         // Add to wishlist
         await saveRoomMutation.mutateAsync(room.id);
         setLiked(true);
-        toast.success("Added to your wishlist!");
+        toast.success(t("room.addedWishlist"));
       }
       onSave?.(room.id);
     } catch (error) {
-      toast.error(error.response?.data?.error || "Failed to update wishlist");
+      toast.error(error.response?.data?.error || t("room.wishlistFailed"));
     }
   };
 
@@ -68,7 +70,7 @@ export default function RoomCard({ room, compact = false, onSave }) {
       <div className="space-y-4 p-5">
         <div className="flex flex-wrap items-center gap-2">
           <Badge color={room.category === "Deluxe" ? "gold" : room.category === "Presidential" ? "maroon" : "vineyard"}>{room.category}</Badge>
-          {room.available ? <Badge color="vineyard">{room.urgencyLabel || "Available"}</Badge> : <Badge color="maroon">Sold Out</Badge>}
+          {room.available ? <Badge color="vineyard">{room.urgencyLabel || t("common.available")}</Badge> : <Badge color="maroon">{t("common.soldOut")}</Badge>}
         </div>
         <div>
           <div className="flex items-start justify-between gap-3">
@@ -78,12 +80,12 @@ export default function RoomCard({ room, compact = false, onSave }) {
             </div>
             <div className="text-right">
               <p className="text-lg font-semibold text-saffron">{formatCurrency(room.pricing?.pricePerNight || room.base_price)}</p>
-              <p className="text-xs text-mutedText">per night</p>
+              <p className="text-xs text-mutedText">{t("common.perNight")}</p>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2 text-sm text-mutedText">
             <Users size={16} />
-            {room.capacity} guests
+            {room.capacity} {t("common.guests")}
           </div>
         </div>
         <div className="flex flex-wrap gap-2 mb-4">
@@ -92,8 +94,8 @@ export default function RoomCard({ room, compact = false, onSave }) {
           ))}
         </div>
         <div className="mt-auto grid gap-3 sm:grid-cols-2">
-          <Button as={Link} to={`/rooms/${room.id}`} variant="outline" className="w-full h-12 flex items-center justify-center">View Details</Button>
-          <Button as={Link} to={`/book/${room.id}`} className="w-full h-12 flex items-center justify-center">Book Now</Button>
+          <Button as={Link} to={`/rooms/${room.id}`} variant="outline" className="w-full h-12 flex items-center justify-center">{t("common.viewDetails")}</Button>
+          <Button as={Link} to={`/book/${room.id}`} className="w-full h-12 flex items-center justify-center">{t("common.bookNow")}</Button>
         </div>
       </div>
     </article>
