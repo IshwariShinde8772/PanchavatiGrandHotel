@@ -12,6 +12,8 @@ module.exports = (sequelize) => sequelize.define(
       allowNull: false,
     },
     password_hash: { type: DataTypes.STRING, allowNull: false },
+    resetPasswordToken: { type: DataTypes.STRING, field: "reset_password_token" },
+    resetPasswordExpires: { type: DataTypes.DATE, field: "reset_password_expires" },
     is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     avatar_url: { type: DataTypes.TEXT },
     schedule_json: { type: DataTypes.JSON, defaultValue: {} },

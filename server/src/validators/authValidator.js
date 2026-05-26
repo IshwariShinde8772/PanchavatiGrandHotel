@@ -64,11 +64,42 @@ const customerLoginSchema = z.object({
   password: z.string().min(8),
 });
 
+const passwordStrengthSchema = requiredTrimmed(
+  z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/,
+      "Password must include uppercase, lowercase, and a number"
+    )
+);
+
+const resetRoleSchema = optionalTrimmed(
+  z.enum(["admin", "customer", "staff", "receptionist", "manager", "housekeeping", "kitchen", "server"])
+);
+
 const forgotPasswordSchema = z.object({
-  email: requiredTrimmed(z.string().email()),
+  identifier: requiredTrimmed(z.string().min(2).max(120)),
+  role: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
+    resetRoleSchema
+  ),
 });
 
 const resetPasswordSchema = z.object({
+  token: requiredTrimmed(z.string().min(32).max(256)),
+  newPassword: passwordStrengthSchema,
+  confirmPassword: requiredTrimmed(z.string().min(8)),
+}).refine(
+  (data) => data.newPassword === data.confirmPassword,
+  { message: "Passwords do not match", path: ["confirmPassword"] }
+);
+
+const customerForgotPasswordSchema = z.object({
+  email: requiredTrimmed(z.string().email()),
+});
+
+const customerResetPasswordSchema = z.object({
   email: requiredTrimmed(z.string().email()),
   otp: z.string().length(6),
   password: z.string().min(8),
@@ -89,6 +120,8 @@ module.exports = {
   customerLoginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  customerForgotPasswordSchema,
+  customerResetPasswordSchema,
   adminLoginSchema,
   loginSchema,
   staffLoginSchema,

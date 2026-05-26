@@ -23,10 +23,11 @@ export function useRoomDetail(id, params = {}) {
   });
 }
 
-export function useSavedRooms() {
+export function useSavedRooms(enabled = true) {
   return useQuery({
     queryKey: ["saved-rooms"],
     queryFn: () => roomAPI.getSavedRooms(),
+    enabled,
   });
 }
 

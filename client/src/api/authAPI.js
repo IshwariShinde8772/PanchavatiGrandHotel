@@ -6,6 +6,8 @@ export const authAPI = {
   login: (payload) => axiosInstance.post("/auth/login", payload).then((res) => res.data),
   loginCustomer: (payload) => axiosInstance.post("/auth/customer/login", payload).then((res) => res.data),
   registerCustomer: (payload) => axiosInstance.post("/auth/customer/register", payload).then((res) => res.data),
+  forgotPassword: (payload) => axiosInstance.post("/auth/forgot-password", payload).then((res) => res.data),
+  resetPassword: (payload) => axiosInstance.post("/auth/reset-password", payload).then((res) => res.data),
   loginAdmin: (payload) => axiosInstance.post("/auth/admin/login", payload).then((res) => res.data),
   loginStaff: (payload) => axiosInstance.post("/auth/staff/login", payload).then((res) => res.data),
   oauthExchange: () => axiosInstance.get("/auth/oauth/exchange", { withCredentials: true }).then((res) => res.data),

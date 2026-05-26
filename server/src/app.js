@@ -21,10 +21,25 @@ const roleGuard = require("./middleware/roleGuard");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
+const allowedOrigins = new Set((env.corsOrigins || []).map((origin) => String(origin).trim()).filter(Boolean));
+
+function isAllowedOrigin(origin) {
+  if (!origin) {
+    return true;
+  }
+
+  return allowedOrigins.has(origin);
+}
 
 app.use(helmet());
 app.use(cors({
-  origin: env.clientUrl,
+  origin(origin, callback) {
+    if (isAllowedOrigin(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(null, false);
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: "5mb" }));
@@ -48,7 +63,13 @@ app.use(passport.session());
 
 // Serve uploaded files with CORS headers
 app.use("/uploads", (req, res, next) => {
-  res.header("Access-Control-Allow-Origin", env.clientUrl);
+  const requestOrigin = req.headers.origin;
+  if (requestOrigin && isAllowedOrigin(requestOrigin)) {
+    res.header("Access-Control-Allow-Origin", requestOrigin);
+  } else if (env.clientUrl) {
+    res.header("Access-Control-Allow-Origin", env.clientUrl);
+  }
+  res.header("Vary", "Origin");
   res.header("Cache-Control", "public, max-age=86400"); // Cache for 24 hours
   next();
 }, express.static(uploadsDir));

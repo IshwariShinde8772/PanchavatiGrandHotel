@@ -33,6 +33,7 @@ jest.mock("../models", () => ({
   Booking: {
     findByPk: jest.fn(),
     findOne: jest.fn(),
+    count: jest.fn(),
   },
   Customer: {},
   CustomerHistory: {
@@ -65,6 +66,7 @@ const { generateBill } = require("../src/services/billService");
 const { sendBookingConfirmation } = require("../src/services/emailService");
 const {
   verifyBookingPayment,
+  cancelBooking,
   checkInBooking,
   checkOutBooking,
 } = require("../src/controllers/booking/bookingController");
@@ -293,5 +295,128 @@ describe("Booking controller hardening and lifecycle", () => {
     expect(transaction.commit).toHaveBeenCalled();
     expect(transaction.rollback).not.toHaveBeenCalled();
   });
-});
 
+  it("blocks cancellation for pending bookings", async () => {
+    const transaction = {
+      LOCK: { UPDATE: "UPDATE" },
+      commit: jest.fn(),
+      rollback: jest.fn(),
+    };
+    sequelize.transaction.mockResolvedValue(transaction);
+
+    const booking = {
+      id: 31,
+      status: "pending",
+      customer_id: 5,
+    };
+    Booking.findByPk.mockResolvedValue(booking);
+
+    const req = {
+      params: { id: "31" },
+      body: { reason: "Change of plans" },
+      user: { id: 5, role: "customer" },
+    };
+    const res = createRes();
+
+    await cancelBooking(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      error: expect.stringContaining("Pending bookings cannot be cancelled"),
+    }));
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it("allows cancellation for confirmed bookings and updates room status safely", async () => {
+    const transaction = {
+      LOCK: { UPDATE: "UPDATE" },
+      commit: jest.fn(),
+      rollback: jest.fn(),
+    };
+    sequelize.transaction.mockResolvedValue(transaction);
+
+    const roomUpdate = jest.fn().mockResolvedValue(true);
+    const booking = {
+      id: 44,
+      booking_ref: "BKG-CANCEL-44",
+      status: "confirmed",
+      check_in: "2026-06-20",
+      fare_per_night: 2200,
+      total_amount: 6600,
+      payment_status: "pay_at_hotel",
+      razorpay_payment_id: null,
+      customer_id: 7,
+      room_id: 2,
+      room: {
+        status: "occupied",
+        update: roomUpdate,
+      },
+      update: jest.fn().mockResolvedValue(true),
+    };
+
+    Booking.findByPk.mockResolvedValue(booking);
+    Booking.count.mockResolvedValue(0);
+    PaymentTransaction.update.mockResolvedValue([1]);
+    Notification.create.mockResolvedValue({ id: 1 });
+
+    const req = {
+      params: { id: "44" },
+      body: { reason: "Guest request" },
+      user: { id: 7, role: "customer" },
+    };
+    const res = createRes();
+
+    await cancelBooking(req, res);
+
+    expect(booking.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "cancelled" }),
+      expect.any(Object)
+    );
+    expect(Booking.count).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        room_id: 2,
+        status: "checked_in",
+      }),
+    }));
+    expect(roomUpdate).toHaveBeenCalledWith({ status: "available" }, expect.any(Object));
+    expect(transaction.commit).toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      message: "Booking cancelled successfully",
+    }));
+  });
+
+  it("blocks cancellation for checked-in bookings", async () => {
+    const transaction = {
+      LOCK: { UPDATE: "UPDATE" },
+      commit: jest.fn(),
+      rollback: jest.fn(),
+    };
+    sequelize.transaction.mockResolvedValue(transaction);
+
+    const booking = {
+      id: 55,
+      status: "checked_in",
+      customer_id: 9,
+    };
+    Booking.findByPk.mockResolvedValue(booking);
+
+    const req = {
+      params: { id: "55" },
+      body: { reason: "Cannot travel" },
+      user: { id: 9, role: "customer" },
+    };
+    const res = createRes();
+
+    await cancelBooking(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      error: expect.stringContaining("Checked-in bookings cannot be cancelled"),
+    }));
+    expect(transaction.rollback).toHaveBeenCalled();
+  });
+});

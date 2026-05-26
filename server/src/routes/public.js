@@ -1,6 +1,13 @@
 const express = require("express");
 const validate = require("../middleware/validate");
-const { customerLoginLimiter, adminLoginLimiter, staffLoginLimiter, otpLimiter } = require("../middleware/rateLimiter");
+const {
+  customerLoginLimiter,
+  adminLoginLimiter,
+  staffLoginLimiter,
+  otpLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
+} = require("../middleware/rateLimiter");
 const { roomQuerySchema, roomCreateSchema } = require("../validators/roomValidator");
 const {
   sendOtpSchema,
@@ -8,8 +15,10 @@ const {
   customerRegisterSchema,
   customerLoginSchema,
   forgotPasswordSchema,
+  customerForgotPasswordSchema,
   loginSchema,
   resetPasswordSchema,
+  customerResetPasswordSchema,
   adminLoginSchema,
   staffLoginSchema,
 } = require("../validators/authValidator");
@@ -19,9 +28,13 @@ const {
   verifyOtpCode,
   registerCustomer,
   loginCustomer,
+  forgotPassword: forgotCustomerPassword,
+  resetPassword: resetCustomerPassword,
+} = require("../controllers/auth/customerAuth");
+const {
   forgotPassword,
   resetPassword,
-} = require("../controllers/auth/customerAuth");
+} = require("../controllers/auth/passwordResetAuth");
 const { loginAdmin } = require("../controllers/auth/adminAuth");
 const { login } = require("../controllers/auth/loginAuth");
 const { loginStaff } = require("../controllers/auth/staffAuth");
@@ -47,8 +60,10 @@ router.post("/auth/verify-otp", validate(verifyOtpSchema), verifyOtpCode);
 router.post("/auth/login", validate(loginSchema), login);
 router.post("/auth/customer/register", customerLoginLimiter, validate(customerRegisterSchema), registerCustomer);
 router.post("/auth/customer/login", validate(customerLoginSchema), loginCustomer);
-router.post("/auth/customer/forgot-password", validate(forgotPasswordSchema), forgotPassword);
-router.post("/auth/customer/reset-password", validate(resetPasswordSchema), resetPassword);
+router.post("/auth/forgot-password", forgotPasswordLimiter, validate(forgotPasswordSchema), forgotPassword);
+router.post("/auth/reset-password", resetPasswordLimiter, validate(resetPasswordSchema), resetPassword);
+router.post("/auth/customer/forgot-password", forgotPasswordLimiter, validate(customerForgotPasswordSchema), forgotCustomerPassword);
+router.post("/auth/customer/reset-password", resetPasswordLimiter, validate(customerResetPasswordSchema), resetCustomerPassword);
 router.post("/auth/admin/login", adminLoginLimiter, validate(adminLoginSchema), loginAdmin);
 router.post("/auth/staff/login", staffLoginLimiter, validate(staffLoginSchema), loginStaff);
 

@@ -24,11 +24,29 @@ const EMPTY_FORM = {
 };
 
 const IMAGE_EXTENSIONS = /\.(avif|bmp|gif|jpe?g|png|svg|webp)(\?.*)?(#.*)?$/i;
+const TRUSTED_IMAGE_HOSTS = [
+  "images.unsplash.com",
+  "res.cloudinary.com",
+  "firebasestorage.googleapis.com",
+];
 
 function isDirectImageUrl(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return false;
+  }
+
   try {
-    const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol) && IMAGE_EXTENSIONS.test(url.pathname);
+    const parsed = new URL(normalized);
+    const hasValidProtocol = ["http:", "https:"].includes(parsed.protocol);
+    const hasImageExtension =
+      IMAGE_EXTENSIONS.test(parsed.pathname) ||
+      IMAGE_EXTENSIONS.test(normalized);
+    const isTrustedImageHost = TRUSTED_IMAGE_HOSTS.some(
+      (host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)
+    );
+
+    return hasValidProtocol && (hasImageExtension || isTrustedImageHost);
   } catch (error) {
     return false;
   }
@@ -166,7 +184,7 @@ export default function ManageRooms() {
     if (!imageUrl) return;
 
     if (!isDirectImageUrl(imageUrl)) {
-      toast.error("Please enter a valid direct image URL (http/https ending with an image file extension).");
+      toast.error("Please enter a valid image URL (http/https).");
       return;
     }
 

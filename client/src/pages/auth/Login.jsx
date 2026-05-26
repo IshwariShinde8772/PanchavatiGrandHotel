@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import InputField from "../../components/forms/InputField";
@@ -23,6 +23,13 @@ export default function Login() {
   });
 
   const login = useLoginMutation();
+  const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+
+  useEffect(() => {
+    if (searchParams.get("reason") === "session_expired") {
+      toast.error("Your session expired. Please login again.");
+    }
+  }, [searchParams]);
 
   const sendOtp = async () => {
     const normalizedPhone = normalizePhoneNumber(form.phone);
@@ -83,7 +90,8 @@ export default function Login() {
 
       const loggedInRole = response?.data?.user?.role || response?.user?.role || "customer";
 
-      let from = location.state?.redirectTo || location.state?.from?.pathname;
+      const redirectFromQuery = searchParams.get("redirectTo");
+      let from = location.state?.redirectTo || location.state?.from?.pathname || redirectFromQuery;
       if (!from || from === "/login") {
         if (loggedInRole === "admin") from = "/admin";
         else if (["receptionist", "manager"].includes(loggedInRole)) from = "/receptionist";
@@ -155,6 +163,11 @@ export default function Login() {
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
                 required
               />
+              <div className="text-right">
+                <Link to="/forgot-password" className="text-xs font-semibold hover:underline" style={{ color: "#0A4D34" }}>
+                  Forgot Password?
+                </Link>
+              </div>
             </>
           ) : (
             <>

@@ -17,6 +17,8 @@ Authorization: Bearer <JWT>
 - `POST /auth/send-otp`
 - `POST /auth/verify-otp`
 - `POST /auth/login`
+- `POST /auth/forgot-password`
+- `POST /auth/reset-password`
 - `POST /auth/customer/register`
 - `POST /auth/customer/login`
 - `POST /auth/customer/forgot-password`
@@ -179,4 +181,3 @@ Rules:
 - allows jpeg/png/webp only
 - validates magic-byte file signature (not just extension/mimetype)
 - rejects spoofed files with clean error response
-

@@ -1,10 +1,23 @@
 const fs = require("fs");
 const path = require("path");
 const bcrypt = require("bcryptjs");
+const { DataTypes } = require("sequelize");
 const env = require("../config/env");
 const { sequelize, Admin, HotelSetting } = require("../../models");
 
-const uploadsDir = path.resolve(__dirname, "../../uploads");
+function resolveStaticAssetsPath() {
+  const configuredPath = String(env.staticAssetsPath || "").trim();
+
+  if (!configuredPath) {
+    return path.resolve(__dirname, "../../uploads");
+  }
+
+  return path.isAbsolute(configuredPath)
+    ? configuredPath
+    : path.resolve(process.cwd(), configuredPath);
+}
+
+const uploadsDir = resolveStaticAssetsPath();
 
 const defaultHotelSettings = {
   id: 1,
@@ -13,7 +26,7 @@ const defaultHotelSettings = {
   phone: "+91-0253-4447777",
   email: "stay@panchavatgrand.in",
   whatsapp: "919999999999",
-  gst_percent: 12,
+  gst_percent: env.gstPercent,
   bank_name: "State Bank of India",
   upi_id: "panchavatgrand@okaxis",
   gstin_number: "27AAAAA0000A1Z5",
@@ -27,6 +40,33 @@ const defaultHotelSettings = {
 
 function ensureUploadDirectory() {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+async function ensureResetPasswordColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const targets = [
+    { table: "admins", columns: ["reset_password_token", "reset_password_expires"] },
+    { table: "staff", columns: ["reset_password_token", "reset_password_expires"] },
+    { table: "customers", columns: ["reset_password_token", "reset_password_expires"] },
+  ];
+
+  for (const target of targets) {
+    const tableMeta = await queryInterface.describeTable(target.table);
+
+    if (!tableMeta[target.columns[0]]) {
+      await queryInterface.addColumn(target.table, target.columns[0], {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+      });
+    }
+
+    if (!tableMeta[target.columns[1]]) {
+      await queryInterface.addColumn(target.table, target.columns[1], {
+        type: DataTypes.DATE,
+        allowNull: true,
+      });
+    }
+  }
 }
 
 async function ensureBaseRecords() {
@@ -64,6 +104,7 @@ async function syncDatabase(options = {}) {
 
   try {
     await sequelize.sync(syncOptions);
+    await ensureResetPasswordColumns();
   } finally {
     if (shouldDisableForeignKeys) {
       await sequelize.query("SET FOREIGN_KEY_CHECKS = 1");

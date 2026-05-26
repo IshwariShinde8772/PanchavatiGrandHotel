@@ -59,4 +59,5 @@ async function sendBookingConfirmation(booking, customer, hotelSettings) {
 module.exports = {
   sendEmail,
   sendBookingConfirmation,
+  hasUsableSmtpConfig,
 };

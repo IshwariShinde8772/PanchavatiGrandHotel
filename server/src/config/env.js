@@ -4,6 +4,19 @@ dotenv.config();
 
 const nodeEnv = process.env.NODE_ENV || "development";
 const port = Number(process.env.PORT || 5000);
+const emailHost = process.env.EMAIL_HOST || process.env.SMTP_HOST || "smtp.gmail.com";
+const emailPort = Number(process.env.EMAIL_PORT || process.env.SMTP_PORT || 587);
+const emailUser = process.env.EMAIL_USER || process.env.SMTP_USER || "";
+const emailPass = process.env.EMAIL_PASS || process.env.SMTP_PASS || "";
+const defaultClientUrl = nodeEnv === "development" ? "http://localhost:5173" : "";
+const clientUrl = process.env.CLIENT_URL || defaultClientUrl;
+const corsOrigins = (process.env.CORS_ORIGINS || defaultClientUrl)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const gstPercent = Number(
+  process.env.GST_PERCENT || (nodeEnv === "development" ? 12 : 0)
+);
 
 const env = {
   port,
@@ -28,6 +41,10 @@ const env = {
   },
   jwtSecret: process.env.JWT_SECRET || "panchavati_nashik_secret_key_change_this_in_prod",
   jwtExpiry: process.env.JWT_EXPIRY || "7d",
+  twofactor: {
+    apiKey: process.env.TWOFACTOR_API_KEY || "",
+    template: process.env.TWOFACTOR_TEMPLATE || "",
+  },
   fast2smsKey: process.env.FAST2SMS_API_KEY || "",
   fast2smsSenderId: process.env.FAST2SMS_SENDER_ID || "PVHTEL",
   twilio: {
@@ -45,13 +62,16 @@ const env = {
     keySecret: process.env.RAZORPAY_KEY_SECRET || "",
   },
   smtp: {
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT || 587),
-    user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
-    from: process.env.EMAIL_FROM || "noreply@panchavatgrand.in",
+    host: emailHost,
+    port: emailPort,
+    user: emailUser,
+    pass: emailPass,
+    from: process.env.EMAIL_FROM || process.env.SMTP_FROM || "noreply@panchavatgrand.in",
   },
-  clientUrl: process.env.CLIENT_URL || "http://localhost:5173",
+  clientUrl,
+  corsOrigins,
+  gstPercent: Number.isFinite(gstPercent) ? gstPercent : 0,
+  staticAssetsPath: process.env.STATIC_ASSETS_PATH || "",
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID || "",
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",

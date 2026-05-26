@@ -62,7 +62,11 @@ async function sendOtpCode(req, res) {
 
   let smsResult;
   try {
-    smsResult = await sendSms(phone, `Your Panchavati Grand OTP is ${otp}. It is valid for 10 minutes.`);
+    smsResult = await sendSms(
+      phone,
+      `Your Panchavati Grand OTP is ${otp}. It is valid for 10 minutes.`,
+      { otp }
+    );
   } catch (error) {
     console.error(`Failed to send OTP SMS to ${phone}: ${error.message}`);
     return res.status(502).json({
@@ -321,7 +325,15 @@ async function resetPassword(req, res) {
 
 async function getProfile(req, res) {
   const customer = await Customer.findByPk(req.user.id, {
-    attributes: { exclude: ["password_hash", "otp_code", "otp_expires_at"] },
+    attributes: {
+      exclude: [
+        "password_hash",
+        "otp_code",
+        "otp_expires_at",
+        "resetPasswordToken",
+        "resetPasswordExpires",
+      ],
+    },
   });
 
   const totalStays = await Booking.count({
@@ -467,7 +479,15 @@ async function clearNotifications(req, res) {
 
 async function listCustomers(req, res) {
   const customers = await Customer.findAll({
-    attributes: { exclude: ["password_hash", "otp_code", "otp_expires_at"] },
+    attributes: {
+      exclude: [
+        "password_hash",
+        "otp_code",
+        "otp_expires_at",
+        "resetPasswordToken",
+        "resetPasswordExpires",
+      ],
+    },
     order: [["created_at", "DESC"]],
   });
 
@@ -499,7 +519,15 @@ async function listCustomers(req, res) {
 
 async function getCustomerDetail(req, res) {
   const customer = await Customer.findByPk(req.params.id, {
-    attributes: { exclude: ["password_hash", "otp_code", "otp_expires_at"] },
+    attributes: {
+      exclude: [
+        "password_hash",
+        "otp_code",
+        "otp_expires_at",
+        "resetPasswordToken",
+        "resetPasswordExpires",
+      ],
+    },
     include: [
       { model: Booking, as: "bookings", include: [{ model: Room, as: "room" }] },
       { association: "feedbacks", required: false },

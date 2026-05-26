@@ -36,9 +36,29 @@ const otpLimiter = rateLimit({
   message: { success: false, error: "Too many OTP requests. Try again in 15 minutes." },
 });
 
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `forgot_${req.body.identifier || req.body.email || req.ip}`,
+  message: { success: false, error: "Too many password reset attempts. Try again in 15 minutes." },
+});
+
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `reset_${req.ip}`,
+  message: { success: false, error: "Too many reset attempts. Try again in 15 minutes." },
+});
+
 module.exports = {
   customerLoginLimiter,
   adminLoginLimiter,
   staffLoginLimiter,
   otpLimiter,
+  forgotPasswordLimiter,
+  resetPasswordLimiter,
 };

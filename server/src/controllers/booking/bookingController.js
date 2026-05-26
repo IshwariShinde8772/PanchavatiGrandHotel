@@ -49,8 +49,11 @@ function ensureBookingDates(checkIn, checkOut) {
   return { nights };
 }
 
-async function prepareBookingData({ roomId, checkIn, checkOut, guests, transaction }) {
-  const room = await Room.findByPk(roomId, { transaction });
+async function prepareBookingData({ roomId, checkIn, checkOut, guests, transaction, lockRows = false }) {
+  const room = await Room.findByPk(roomId, {
+    transaction,
+    ...(lockRows && transaction ? { lock: transaction.LOCK.UPDATE } : {}),
+  });
   if (!room || !room.is_active) {
     const error = new Error("Room not found");
     error.status = 404;
@@ -63,6 +66,7 @@ async function prepareBookingData({ roomId, checkIn, checkOut, guests, transacti
     checkIn,
     checkOut,
     transaction,
+    lockRows,
   });
 
   if (overlapCount >= Number(room.total_units)) {
@@ -80,7 +84,7 @@ async function prepareBookingData({ roomId, checkIn, checkOut, guests, transacti
   const settings = await HotelSetting.findByPk(1, { transaction });
   const price = calculateEffectivePrice(room, checkIn);
   const fare = Number((price.pricePerNight * nights).toFixed(2));
-  const gst = calculateGST(fare, settings?.gst_percent || 12);
+  const gst = calculateGST(fare, settings?.gst_percent ?? env.gstPercent);
 
   return {
     room,
@@ -116,6 +120,7 @@ async function createBooking(req, res) {
       checkOut: check_out,
       guests,
       transaction,
+      lockRows: true,
     });
 
     const isPayLater = payment_method === "pay_later";
@@ -374,72 +379,117 @@ async function getCustomerBooking(req, res) {
 }
 
 async function cancelBooking(req, res) {
-  const booking = await Booking.findByPk(req.params.id, {
-    include: [
-      { model: Customer, as: "customer" },
-      { model: Room, as: "room" },
-    ],
-  });
+  const transaction = await sequelize.transaction();
 
-  if (!booking) {
-    return res.status(404).json({ success: false, error: "Booking not found" });
-  }
+  try {
+    const booking = await Booking.findByPk(req.params.id, {
+      include: [
+        { model: Customer, as: "customer" },
+        { model: Room, as: "room" },
+      ],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
 
-  if (req.user.role === "customer" && booking.customer_id !== req.user.id) {
-    return res.status(403).json({ success: false, error: "You cannot cancel this booking" });
-  }
-
-  if (booking.status === "checked_in" || booking.status === "checked_out") {
-    return res.status(400).json({ success: false, error: "This booking can no longer be cancelled" });
-  }
-
-  const checkInDate = new Date(booking.check_in);
-  const hoursBeforeCheckIn = (checkInDate.getTime() - Date.now()) / (1000 * 60 * 60);
-  const penalty = hoursBeforeCheckIn > 48 ? 0 : Number(booking.fare_per_night);
-
-  const previousPaymentStatus = booking.payment_status;
-  await booking.update({
-    status: "cancelled",
-    cancelled_at: new Date(),
-    cancellation_reason: req.body.reason,
-    payment_status: previousPaymentStatus === "paid" ? "refunded" : previousPaymentStatus,
-  });
-
-  if (previousPaymentStatus === "paid" && booking.razorpay_payment_id) {
-    await refundPayment(booking.razorpay_payment_id, Math.max((Number(booking.total_amount) - penalty) * 100, 0));
-  }
-
-  await PaymentTransaction.update(
-    {
-      status: "cancelled",
-      updated_at: new Date(),
-      remarks: req.body.reason || "Booking cancelled",
-    },
-    {
-      where: {
-        booking_id: booking.id,
-        status: "pending",
-      },
+    if (!booking) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: "Booking not found" });
     }
-  );
 
-  await Notification.create({
-    target_role: "customer",
-    target_id: booking.customer_id,
-    title: "Booking Cancelled",
-    message: `${booking.booking_ref} has been cancelled. Refund will follow policy terms.`,
-    type: "booking",
-  });
+    if (req.user.role === "customer" && booking.customer_id !== req.user.id) {
+      await transaction.rollback();
+      return res.status(403).json({ success: false, error: "You cannot cancel this booking" });
+    }
 
-  return res.json({
-    success: true,
-    data: {
-      booking,
-      penalty,
-      refund: Math.max(Number(booking.total_amount) - penalty, 0),
-    },
-    message: "Booking cancelled successfully",
-  });
+    const status = String(booking.status || "").toLowerCase();
+    if (status !== "confirmed") {
+      const messageByStatus = {
+        pending: "Pending bookings cannot be cancelled. Only confirmed bookings can be cancelled.",
+        checked_in: "Checked-in bookings cannot be cancelled.",
+        checked_out: "Checked-out bookings cannot be cancelled.",
+        cancelled: "This booking has already been cancelled.",
+        rejected: "Rejected bookings cannot be cancelled.",
+        completed: "Completed bookings cannot be cancelled.",
+      };
+
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: messageByStatus[status] || `Booking with status "${status}" cannot be cancelled.`,
+      });
+    }
+
+    const checkInDate = parseDateInput(booking.check_in) || new Date(booking.check_in);
+    const hoursBeforeCheckIn = (checkInDate.getTime() - Date.now()) / (1000 * 60 * 60);
+    const penalty = hoursBeforeCheckIn > 48 ? 0 : Number(booking.fare_per_night);
+    const previousPaymentStatus = booking.payment_status;
+
+    await booking.update({
+      status: "cancelled",
+      cancelled_at: new Date(),
+      cancellation_reason: req.body.reason,
+      payment_status: previousPaymentStatus === "paid" ? "refunded" : previousPaymentStatus,
+    }, { transaction });
+
+    if (previousPaymentStatus === "paid" && booking.razorpay_payment_id) {
+      await refundPayment(
+        booking.razorpay_payment_id,
+        Math.max((Number(booking.total_amount) - penalty) * 100, 0)
+      );
+    }
+
+    await PaymentTransaction.update(
+      {
+        status: "cancelled",
+        updated_at: new Date(),
+        remarks: req.body.reason || "Booking cancelled",
+      },
+      {
+        where: {
+          booking_id: booking.id,
+          status: "pending",
+        },
+        transaction,
+      }
+    );
+
+    if (booking.room && booking.room.status === "occupied") {
+      const activeCheckedInCount = await Booking.count({
+        where: {
+          room_id: booking.room_id,
+          status: "checked_in",
+        },
+        transaction,
+      });
+
+      if (activeCheckedInCount === 0) {
+        await booking.room.update({ status: "available" }, { transaction });
+      }
+    }
+
+    await Notification.create({
+      target_role: "customer",
+      target_id: booking.customer_id,
+      title: "Booking Cancelled",
+      message: `${booking.booking_ref} has been cancelled. Refund will follow policy terms.`,
+      type: "booking",
+    }, { transaction });
+
+    await transaction.commit();
+
+    return res.json({
+      success: true,
+      data: {
+        booking,
+        penalty,
+        refund: Math.max(Number(booking.total_amount) - penalty, 0),
+      },
+      message: "Booking cancelled successfully",
+    });
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
 }
 
 async function listAllBookings(req, res) {
@@ -547,6 +597,7 @@ async function createWalkInBooking(req, res) {
       checkOut: check_out,
       guests,
       transaction,
+      lockRows: true,
     });
 
     const booking = await Booking.create({

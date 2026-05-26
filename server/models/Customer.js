@@ -18,6 +18,8 @@ module.exports = (sequelize) => sequelize.define(
     id_doc_url: { type: DataTypes.TEXT },
     otp_code: { type: DataTypes.STRING },
     otp_expires_at: { type: DataTypes.DATE },
+    resetPasswordToken: { type: DataTypes.STRING, field: "reset_password_token" },
+    resetPasswordExpires: { type: DataTypes.DATE, field: "reset_password_expires" },
     otp_verified: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     is_deleted: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },

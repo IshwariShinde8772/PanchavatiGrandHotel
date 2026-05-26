@@ -98,7 +98,7 @@ function calculateEffectivePrice(room, checkIn) {
   };
 }
 
-async function countOverlappingBookings({ roomId, checkIn, checkOut, excludeBookingId, transaction }) {
+async function countOverlappingBookings({ roomId, checkIn, checkOut, excludeBookingId, transaction, lockRows = false }) {
   if (!checkIn || !checkOut) {
     return 0;
   }
@@ -114,6 +114,17 @@ async function countOverlappingBookings({ roomId, checkIn, checkOut, excludeBook
 
   if (excludeBookingId) {
     where.id = { [Op.ne]: excludeBookingId };
+  }
+
+  if (lockRows && transaction) {
+    // Lock overlapping booking rows so concurrent writes cannot overbook.
+    const rows = await Booking.findAll({
+      where,
+      attributes: ["id"],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+    return rows.length;
   }
 
   return Booking.count({ where, transaction });

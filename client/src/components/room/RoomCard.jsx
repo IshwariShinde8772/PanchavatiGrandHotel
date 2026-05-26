@@ -12,7 +12,7 @@ import { useSaveRoom, useSavedRooms, useRemoveSavedRoom } from "../../hooks/useR
 export default function RoomCard({ room, compact = false, onSave }) {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
-  const { data: savedRooms } = useSavedRooms();
+  const { data: savedRooms } = useSavedRooms(Boolean(user));
   const saveRoomMutation = useSaveRoom();
   const removeRoomMutation = useRemoveSavedRoom();
   
@@ -31,7 +31,7 @@ export default function RoomCard({ room, compact = false, onSave }) {
       // Store the room ID to save after login
       sessionStorage.setItem('pendingSaveRoom', room.id.toString());
       toast.error("Please login to add rooms to your wishlist");
-      navigate('/auth/login');
+      navigate('/login');
       return;
     }
 

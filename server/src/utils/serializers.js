@@ -7,6 +7,10 @@ function sanitizeUser(record) {
   delete plain.password_hash;
   delete plain.otp_code;
   delete plain.otp_expires_at;
+  delete plain.resetPasswordToken;
+  delete plain.resetPasswordExpires;
+  delete plain.reset_password_token;
+  delete plain.reset_password_expires;
   return plain;
 }
 

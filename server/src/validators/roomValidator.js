@@ -2,23 +2,72 @@ const { z } = require("zod");
 
 const emptyStringToNull = (value) => (value === "" ? null : value);
 
-const nullableDateSchema = z.preprocess(emptyStringToNull, z.string().nullable().optional());
+const nullableDateSchema = z.preprocess(
+  emptyStringToNull,
+  z.string().nullable().optional()
+);
+
 const nullablePositiveNumberSchema = z.preprocess(
   emptyStringToNull,
   z.coerce.number().positive().nullable().optional()
 );
+
 const nullablePercentSchema = z.preprocess(
   emptyStringToNull,
   z.coerce.number().min(0).max(100).nullable().optional()
 );
+
 const nullableIntegerSchema = z.preprocess(
   emptyStringToNull,
   z.coerce.number().int().nullable().optional()
 );
-const IMAGE_EXTENSIONS = /\.(avif|bmp|gif|jpe?g|png|svg|webp)(\?.*)?(#.*)?$/i;
+
+const IMAGE_EXTENSIONS =
+  /\.(avif|bmp|gif|jpe?g|png|svg|webp)(\?.*)?(#.*)?$/i;
+
+const TRUSTED_IMAGE_HOSTS = [
+  "images.unsplash.com",
+  "res.cloudinary.com",
+  "firebasestorage.googleapis.com",
+];
+
+function normalizeImageReferences(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === "") {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      // Fall back to treating a single string as one image URL.
+    }
+
+    return [trimmed];
+  }
+
+  return [String(value)];
+}
 
 function isValidImageReference(value) {
   const normalized = String(value || "").trim();
+
   if (!normalized) {
     return false;
   }
@@ -33,7 +82,19 @@ function isValidImageReference(value) {
 
   try {
     const parsed = new URL(normalized);
-    return ["http:", "https:"].includes(parsed.protocol) && IMAGE_EXTENSIONS.test(parsed.pathname);
+
+    const hasValidProtocol =
+      parsed.protocol === "http:" || parsed.protocol === "https:";
+
+    const hasImageExtension =
+      IMAGE_EXTENSIONS.test(parsed.pathname) ||
+      IMAGE_EXTENSIONS.test(normalized);
+
+    const isTrustedImageHost = TRUSTED_IMAGE_HOSTS.some(
+      (host) => parsed.hostname === host || parsed.hostname.endsWith(`.${host}`)
+    );
+
+    return hasValidProtocol && (hasImageExtension || isTrustedImageHost);
   } catch (error) {
     return false;
   }
@@ -42,6 +103,11 @@ function isValidImageReference(value) {
 const imageReferenceSchema = z.string().trim().refine(
   isValidImageReference,
   "Each image must be a valid image URL or upload path"
+);
+
+const imageReferenceArraySchema = z.preprocess(
+  normalizeImageReferences,
+  z.array(imageReferenceSchema)
 );
 
 const roomQuerySchema = z.object({
@@ -72,7 +138,7 @@ const roomCreateSchema = z.object({
   total_units: z.coerce.number().int().min(1).default(1),
   capacity: z.coerce.number().int().min(1),
   amenities: z.array(z.string()).default([]),
-  images: z.array(imageReferenceSchema).default([]),
+  images: imageReferenceArraySchema.default([]),
   floor: nullableIntegerSchema,
   view_type: z.preprocess(emptyStringToNull, z.string().nullable().optional()),
   bed_type: z.preprocess(emptyStringToNull, z.string().nullable().optional()),
@@ -97,7 +163,7 @@ const roomUpdateSchema = z.object({
   total_units: z.coerce.number().int().min(1).optional(),
   capacity: z.coerce.number().int().min(1).optional(),
   amenities: z.array(z.string()).optional(),
-  images: z.array(imageReferenceSchema).optional(),
+  images: imageReferenceArraySchema.optional(),
   floor: nullableIntegerSchema,
   view_type: z.preprocess(emptyStringToNull, z.string().nullable().optional()),
   bed_type: z.preprocess(emptyStringToNull, z.string().nullable().optional()),
