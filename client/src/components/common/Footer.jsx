@@ -1,15 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { Facebook, Instagram, MapPin, Phone, Youtube } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { settingsAPI } from "../../api/settingsAPI";
 
 export default function Footer() {
+  const { t } = useTranslation();
   const { data } = useQuery({
     queryKey: ["public-settings"],
     queryFn: () => settingsAPI.public(),
   });
 
   const hotel = data?.data;
+  const links = [
+    { label: t("common.rooms"), to: "/rooms" },
+    { label: t("common.offers"), to: "/offers" },
+    { label: t("common.about"), to: "/about" },
+    { label: t("common.contact"), to: "/contact" },
+    { label: t("common.careers"), to: "/contact" },
+  ];
 
   return (
     <footer className="mt-20 py-10" style={{ backgroundColor: "#0A4D34", color: "#F9FAF9" }}>

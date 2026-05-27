@@ -1,21 +1,23 @@
 import { Bell, CreditCard, Heart, Home, MessageSquareMore, User, HelpCircle } from "lucide-react";
 import { Outlet } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import PortalShell from "../../layout/PortalShell";
 
-const items = [
-  { label: "Home", to: "/customer", icon: Home },
-  { label: "My Trips", to: "/customer/my-bookings", icon: Home },
-  { label: "My Rooms", to: "/customer/my-rooms", icon: Heart },
-  { label: "Enquiry", to: "/customer/enquiry", icon: HelpCircle },
-  { label: "Transactions", to: "/customer/transactions", icon: CreditCard },
-  { label: "Feedback", to: "/customer/feedback", icon: MessageSquareMore },
-  { label: "Notifications", to: "/customer/notifications", icon: Bell },
-  { label: "Profile", to: "/customer/profile", icon: User },
-];
-
 export default function CustomerLayout() {
+  const { t } = useTranslation();
+  const items = [
+    { label: t("common.home"), to: "/customer", icon: Home },
+    { label: t("nav.myTrips"), to: "/customer/my-bookings", icon: Home },
+    { label: t("nav.myRooms"), to: "/customer/my-rooms", icon: Heart },
+    { label: t("nav.enquiry"), to: "/customer/enquiry", icon: HelpCircle },
+    { label: t("nav.transactions"), to: "/customer/transactions", icon: CreditCard },
+    { label: t("nav.feedback"), to: "/customer/feedback", icon: MessageSquareMore },
+    { label: t("nav.notifications"), to: "/customer/notifications", icon: Bell },
+    { label: t("nav.profile"), to: "/customer/profile", icon: User },
+  ];
+
   return (
-    <PortalShell title="Customer Portal" subtitle="Manage your stays, saved rooms, and profile details." items={items}>
+    <PortalShell title={t("portal.title")} subtitle={t("portal.subtitle")} items={items}>
       <Outlet />
     </PortalShell>
   );

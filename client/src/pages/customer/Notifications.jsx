@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
@@ -16,6 +17,7 @@ const getTimeDiff = (date) => {
 };
 
 export default function Notifications() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   
   // Fetch notifications
@@ -36,18 +38,18 @@ export default function Notifications() {
     mutationFn: ({ id }) => authAPI.deleteNotification(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customer-notifications"] });
-      toast.success("Notification deleted");
+      toast.success(t("customer.notificationDeleted"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || "Failed to delete notification"),
+    onError: (error) => toast.error(error.response?.data?.error || t("customer.notificationDeleteFailed")),
   });
 
   const clearAllMutation = useMutation({
     mutationFn: () => authAPI.clearNotifications(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["customer-notifications"] });
-      toast.success("All notifications cleared");
+      toast.success(t("customer.notificationsCleared"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || "Failed to clear notifications"),
+    onError: (error) => toast.error(error.response?.data?.error || t("customer.notificationsClearFailed")),
   });
 
   const notifications = notificationsData?.data || [];
@@ -57,11 +59,11 @@ export default function Notifications() {
     return (
       <div className="space-y-6">
         <PageHeader 
-          eyebrow="Notifications" 
-          title="Stay updates and reminders" 
-          description="Booking confirmations, check-in reminders, and trip follow-ups appear here." 
+          eyebrow={t("nav.notifications")} 
+          title={t("customer.notificationsTitle")} 
+          description={t("customer.notificationsDescription")} 
         />
-        <div className="text-center py-12">Loading notifications...</div>
+        <div className="text-center py-12">{t("customer.loadingNotifications")}</div>
       </div>
     );
   }
@@ -70,9 +72,9 @@ export default function Notifications() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <PageHeader 
-          eyebrow="Notifications" 
-          title="Stay updates and reminders" 
-          description="Booking confirmations, check-in reminders, and trip follow-ups appear here." 
+          eyebrow={t("nav.notifications")} 
+          title={t("customer.notificationsTitle")} 
+          description={t("customer.notificationsDescription")} 
         />
         <div className="flex gap-2">
           {unreadCount > 0 && (
@@ -80,14 +82,14 @@ export default function Notifications() {
               onClick={() => markReadMutation.mutate()}
               className="text-sm px-3 py-2 rounded-lg border border-divider hover:bg-slate-50 transition-colors"
             >
-              Mark all as read
+              {t("customer.markAllRead")}
             </button>
           )}
           {notifications.length > 0 && (
             <Button
               variant="outline"
               onClick={() => {
-                if (confirm("Clear all notifications? This action cannot be undone.")) {
+                if (confirm(t("customer.clearNotificationsConfirm"))) {
                   clearAllMutation.mutate();
                 }
               }}
@@ -95,7 +97,7 @@ export default function Notifications() {
               className="text-red-600 hover:bg-red-50"
               size="sm"
             >
-              Clear All
+              {t("common.clearAll")}
             </Button>
           )}
         </div>
@@ -103,7 +105,7 @@ export default function Notifications() {
 
       {notifications.length === 0 ? (
         <div className="section-card p-8 text-center">
-          <p className="text-mutedText">No notifications yet. They'll appear here when you get booking updates.</p>
+          <p className="text-mutedText">{t("customer.noNotifications")}</p>
         </div>
       ) : (
         <div className="section-card divide-y divide-divider overflow-hidden">
@@ -128,14 +130,14 @@ export default function Notifications() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  if (confirm("Delete this notification?")) {
+                  if (confirm(t("customer.deleteNotificationConfirm"))) {
                     deleteNotificationMutation.mutate({ id: item.id });
                   }
                 }}
                 disabled={deleteNotificationMutation.isPending}
                 className="text-red-600 hover:bg-red-50 flex-shrink-0"
               >
-                Delete
+                {t("common.delete")}
               </Button>
             </div>
           ))}

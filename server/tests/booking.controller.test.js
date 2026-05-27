@@ -295,7 +295,6 @@ describe("Booking controller hardening and lifecycle", () => {
     expect(transaction.commit).toHaveBeenCalled();
     expect(transaction.rollback).not.toHaveBeenCalled();
   });
-
   it("blocks cancellation for pending bookings", async () => {
     const transaction = {
       LOCK: { UPDATE: "UPDATE" },

@@ -17,4 +17,3 @@ export default function PriceBreakdown({ pricePerNight, nights, gstPercent = 12,
     </div>
   );
 }
-

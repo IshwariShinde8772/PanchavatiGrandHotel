@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import Button from "../common/Button";
 
 function formatTime(seconds) {
@@ -17,6 +18,9 @@ export default function QrPaymentPanel({
   busy = false,
 }) {
   const [now, setNow] = useState(Date.now());
+  const { t } = useTranslation();
+  const displayTitle = title === "Scan QR to Pay" ? t("payment.scanQr") : title;
+  const displaySubtitle = subtitle === "Complete the payment before the timer ends." ? t("payment.completeBeforeTimer") : subtitle;
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -32,15 +36,15 @@ export default function QrPaymentPanel({
 
   return (
     <div className="rounded-[28px] border border-divider bg-white p-5">
-      <h3 className="font-heading text-2xl">{title}</h3>
-      <p className="mt-2 text-sm text-mutedText">{subtitle}</p>
+      <h3 className="font-heading text-2xl">{displayTitle}</h3>
+      <p className="mt-2 text-sm text-mutedText">{displaySubtitle}</p>
 
       <div className="mt-4 rounded-2xl bg-saffronLight p-4 text-sm">
-        <p className="font-semibold text-vineyard">Amount: INR {transaction?.amount}</p>
-        <p className="mt-1 text-mutedText">Status: {transaction?.status}</p>
-        <p className="mt-1 text-mutedText">UPI: {transaction?.upi_id || "Not available"}</p>
+        <p className="font-semibold text-vineyard">{t("payment.amount", { amount: transaction?.amount })}</p>
+        <p className="mt-1 text-mutedText">{t("payment.status", { status: transaction?.status })}</p>
+        <p className="mt-1 text-mutedText">{t("payment.upi", { upi: transaction?.upi_id || t("payment.notAvailable") })}</p>
         <p className={`mt-1 font-semibold ${expired ? "text-red-600" : "text-godavari"}`}>
-          Timer: {expired ? "Expired" : formatTime(secondsRemaining)}
+          {t("payment.timer", { value: expired ? t("payment.expired") : formatTime(secondsRemaining) })}
         </p>
       </div>
 

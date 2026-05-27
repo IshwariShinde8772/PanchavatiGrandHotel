@@ -1,13 +1,20 @@
+import { useTranslation } from "react-i18next";
 import PageHeader from "../../components/common/PageHeader";
 import NashikMapWidget from "../../components/common/NashikMapWidget";
 
 export default function Contact() {
+  const { t } = useTranslation();
+
   return (
     <div className="container-shell py-10">
-      <PageHeader eyebrow="Contact" title="Plan your arrival with confidence" description="We’re based near Ramkund Ghat in Panchavati, with quick access to Nashik’s spiritual core and city connectors." />
+      <PageHeader
+        eyebrow={t("publicPages.contactEyebrow")}
+        title={t("publicPages.contactTitle")}
+        description={t("publicPages.contactDescription")}
+      />
       <div className="mt-8 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
         <div className="section-card p-6">
-          <h3 className="font-heading text-3xl">Reach Us</h3>
+          <h3 className="font-heading text-3xl">{t("publicPages.reachUs")}</h3>
           <div className="mt-4 space-y-3 text-mutedText">
             <p>Near Ramkund Ghat, Panchavati, Nashik, Maharashtra 422003</p>
             <p>Phone: +91-0253-4447777</p>
@@ -20,4 +27,3 @@ export default function Contact() {
     </div>
   );
 }
-

@@ -11,12 +11,10 @@ const nullablePositiveNumberSchema = z.preprocess(
   emptyStringToNull,
   z.coerce.number().positive().nullable().optional()
 );
-
 const nullablePercentSchema = z.preprocess(
   emptyStringToNull,
   z.coerce.number().min(0).max(100).nullable().optional()
 );
-
 const nullableIntegerSchema = z.preprocess(
   emptyStringToNull,
   z.coerce.number().int().nullable().optional()

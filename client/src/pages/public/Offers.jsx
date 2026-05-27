@@ -1,16 +1,18 @@
 import PageHeader from "../../components/common/PageHeader";
 import { useHomeData } from "../../hooks/useRooms";
+import { useTranslation } from "react-i18next";
 
 export default function Offers() {
+  const { t } = useTranslation();
   const { data } = useHomeData();
   const offers = data?.offers || [];
 
   return (
     <div className="container-shell py-10">
       <PageHeader 
-        eyebrow="Special Offers" 
-        title="Exclusive Packages and Direct-Booking Value" 
-        description="From pilgrim-focused long stays to premium vineyard escapes, explore the best ways to experience Nashik at Panchavati Grand." 
+        eyebrow={t("publicPages.offersEyebrow")} 
+        title={t("publicPages.offersTitle")} 
+        description={t("publicPages.offersDescription")} 
       />
       
       <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
@@ -27,7 +29,7 @@ export default function Offers() {
             
             <div className="mt-auto border-t border-white/20 pt-4">
               <p className="text-xs font-semibold uppercase tracking-wider text-[#eab308]">
-                {offer.end_date ? `Valid until ${offer.end_date}` : "Limited period"}
+                {offer.end_date ? t("publicPages.validUntil", { date: offer.end_date }) : t("publicPages.limitedPeriod")}
               </p>
               <div className="mt-3 inline-block rounded-lg border border-white/30 bg-white/10 px-4 py-2 font-mono text-sm tracking-widest backdrop-blur-sm">
                 {offer.discount_pct}% OFF
@@ -35,7 +37,7 @@ export default function Offers() {
             </div>
           </div>
         ))}
-        {offers.length === 0 ? <p className="text-mutedText">No active offers are available right now.</p> : null}
+        {offers.length === 0 ? <p className="text-mutedText">{t("publicPages.noOffers")}</p> : null}
       </div>
     </div>
   );

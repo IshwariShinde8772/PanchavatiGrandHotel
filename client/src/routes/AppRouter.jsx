@@ -13,7 +13,6 @@ import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import AuthCallback from "../pages/auth/AuthCallback";
 import ForgotPassword from "../pages/auth/ForgotPassword";
-import ResetPassword from "../pages/auth/ResetPassword";
 import BookingFlow from "../pages/booking/BookingFlow";
 import BookingConfirmPage from "../pages/booking/BookingConfirmPage";
 import CustomerLayout from "../pages/customer/CustomerLayout";
@@ -74,7 +73,6 @@ export default function AppRouter() {
         <Route path="/register" element={<Register />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/book/:roomId" element={<BookingFlow />} />
         <Route path="/booking/confirmed/:bookingRef" element={<BookingConfirmPage />} />
       </Route>

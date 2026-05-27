@@ -41,40 +41,14 @@ function isAuthEndpoint(config) {
 }
 
 axiosInstance.interceptors.request.use((config) => {
-  const token = getAuthToken();
+  const token = getAuthToken() || useAuthStore.getState().token;
+
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
+
   return config;
 });
 
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const status = error?.response?.status;
-
-    if (status === 401 && !isAuthEndpoint(error?.config)) {
-      const token = getAuthToken();
-
-      if (token) {
-        useAuthStore.getState().logout();
-
-        if (typeof window !== "undefined" && !isHandlingUnauthorizedRedirect) {
-          isHandlingUnauthorizedRedirect = true;
-          const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-          const redirectTo = encodeURIComponent(currentPath);
-
-          if (!window.location.pathname.startsWith("/login")) {
-            window.location.assign(`/login?reason=session_expired&redirectTo=${redirectTo}`);
-          }
-        }
-      }
-    }
-
-    return Promise.reject(error);
-  }
-);
-
 export default axiosInstance;
-

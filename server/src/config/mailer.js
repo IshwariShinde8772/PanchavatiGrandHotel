@@ -11,6 +11,7 @@ const hasSmtpCredentials = Boolean(
  * 1. Enable 2-Step Verification in Google Account
  * 2. Generate App Password: https://myaccount.google.com/apppasswords
  * 3. Use the 16-character App Password in EMAIL_PASS (or SMTP_PASS)
+ * 3. Use the 16-character App Password in SMTP_PASS
  * 
  * For other providers, use regular SMTP credentials
  */

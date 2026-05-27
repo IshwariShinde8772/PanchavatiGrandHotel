@@ -41,4 +41,3 @@ export default function RoomFilters({ filters, onChange, onReset }) {
     </div>
   );
 }
-

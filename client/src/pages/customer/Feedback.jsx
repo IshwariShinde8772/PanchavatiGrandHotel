@@ -9,6 +9,7 @@ import { feedbackAPI } from "../../api/feedbackAPI";
 import { useAuthStore } from "../../store/authStore";
 
 export default function Feedback() {
+  const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const queryClient = useQueryClient();
   const { data } = useMyBookings();
@@ -17,7 +18,7 @@ export default function Feedback() {
   const submitMutation = useMutation({
     mutationFn: feedbackAPI.submit,
     onSuccess: (_, variables) => {
-      toast.success("Feedback submitted successfully");
+      toast.success(t("customer.feedbackSuccess"));
       setForms((prev) => ({
         ...prev,
         [variables.booking_id]: { rating: 0, title: "", comment: "" },
@@ -25,7 +26,7 @@ export default function Feedback() {
       queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || "Failed to submit feedback");
+      toast.error(error.response?.data?.error || t("customer.feedbackFailed"));
     },
   });
 
@@ -49,12 +50,12 @@ export default function Feedback() {
     const form = forms[booking.id] || { rating: 0, title: "", comment: "" };
 
     if (!form.rating) {
-      toast.error("Please select a rating.");
+      toast.error(t("customer.selectRating"));
       return;
     }
 
     if (!form.comment.trim()) {
-      toast.error("Please add a short review comment.");
+      toast.error(t("customer.addReview"));
       return;
     }
 
@@ -70,7 +71,7 @@ export default function Feedback() {
 
   return (
     <div className="space-y-6">
-      <PageHeader eyebrow="Feedback" title="Share your stay experience" description="Your review helps future travelers and helps us refine the stay experience." />
+      <PageHeader eyebrow={t("nav.feedback")} title={t("customer.feedbackTitle")} description={t("customer.feedbackDescription")} />
       <div className="space-y-5">
         {eligibleBookings.map((booking) => {
           const form = forms[booking.id] || { rating: 0, title: "", comment: "" };
@@ -80,7 +81,7 @@ export default function Feedback() {
               <div className="flex items-center gap-4">
                 <img src={booking.room?.images?.[0] || "/assets/images/placeholder-room.svg"} alt={booking.room?.name || booking.booking_ref} className="h-20 w-24 rounded-2xl object-cover" />
                 <div>
-                  <p className="font-heading text-2xl">{booking.room?.name || "Completed stay"}</p>
+                  <p className="font-heading text-2xl">{booking.room?.name || t("customer.completedStay")}</p>
                   <p className="text-sm text-mutedText">{booking.booking_ref}</p>
                 </div>
               </div>
@@ -89,23 +90,23 @@ export default function Feedback() {
               </div>
               <input
                 className="mt-4 w-full rounded-[24px] border border-divider px-4 py-3"
-                placeholder="Review title"
+                placeholder={t("customer.reviewTitle")}
                 value={form.title}
                 onChange={(event) => updateForm(booking.id, { title: event.target.value })}
               />
               <textarea
                 className="mt-4 min-h-28 w-full rounded-[24px] border border-divider px-4 py-3"
-                placeholder="What stood out about your stay?"
+                placeholder={t("customer.reviewPlaceholder")}
                 value={form.comment}
                 onChange={(event) => updateForm(booking.id, { comment: event.target.value })}
               />
               <Button className="mt-4" onClick={() => handleSubmit(booking)} disabled={submitMutation.isPending}>
-                {submitMutation.isPending ? "Submitting..." : "Submit Review"}
+                {submitMutation.isPending ? t("common.submitting") : t("customer.submitReview")}
               </Button>
             </div>
           );
         })}
-        {eligibleBookings.length === 0 ? <p className="text-mutedText">No completed stays are waiting for feedback right now.</p> : null}
+        {eligibleBookings.length === 0 ? <p className="text-mutedText">{t("customer.noFeedback")}</p> : null}
       </div>
     </div>
   );
