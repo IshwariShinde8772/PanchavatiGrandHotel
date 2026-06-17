@@ -12,9 +12,9 @@ export const useAuthStore = create(
       
       setAuth: ({ token, user }) =>
         set({
-          token,
-          user,
-          isAuthenticated: Boolean(token),
+          token: token || null,
+          user: user || null,
+          isAuthenticated: Boolean(token && user),
         }),
       
       logout: () =>
@@ -42,6 +42,18 @@ export const useAuthStore = create(
     }),
     {
       name: "panchavati-auth",
+      version: 1,
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        isAuthenticated: Boolean(state.token && state.user),
+        bookingRedirectTo: state.bookingRedirectTo,
+        bookingSession: state.bookingSession,
+      }),
+      migrate: (persistedState) => ({
+        ...persistedState,
+        isAuthenticated: Boolean(persistedState?.token && persistedState?.user),
+      }),
     }
   )
 );

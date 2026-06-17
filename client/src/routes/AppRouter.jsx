@@ -13,6 +13,7 @@ import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
 import AuthCallback from "../pages/auth/AuthCallback";
 import ForgotPassword from "../pages/auth/ForgotPassword";
+import ResetPassword from "../pages/auth/ResetPassword";
 import BookingFlow from "../pages/booking/BookingFlow";
 import BookingConfirmPage from "../pages/booking/BookingConfirmPage";
 import CustomerLayout from "../pages/customer/CustomerLayout";
@@ -35,9 +36,9 @@ import EnquiryManagement from "../pages/receptionist/EnquiryManagement";
 import ExtensionRequests from "../pages/receptionist/ExtensionRequests";
 import CheckInOut from "../pages/receptionist/CheckInOut";
 import MaintenanceLogLive from "../pages/receptionist/MaintenanceLogLive";
-import CleaningQueue from "../pages/receptionist/CleaningQueue";
 import CustomerHistory from "../pages/receptionist/CustomerHistory";
 import ReservedRooms from "../pages/receptionist/ReservedRooms";
+import ReceptionNotifications from "../pages/receptionist/Notifications";
 import AdminLayout from "../pages/admin/AdminLayout";
 import AdminDashboard from "../pages/admin/Dashboard";
 import ManageRooms from "../pages/admin/ManageRooms";
@@ -73,6 +74,7 @@ export default function AppRouter() {
         <Route path="/register" element={<Register />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/book/:roomId" element={<BookingFlow />} />
         <Route path="/booking/confirmed/:bookingRef" element={<BookingConfirmPage />} />
       </Route>
@@ -98,7 +100,7 @@ export default function AppRouter() {
             <Route path="bookings" element={<ManageBookings />} />
             <Route path="reserved-rooms" element={<ReservedRooms />} />
             <Route path="room-grid" element={<RoomGrid />} />
-            <Route path="tasks" element={<CleaningQueue />} />
+            <Route path="notifications" element={<ReceptionNotifications />} />
             <Route path="bill-generator" element={<BillGenerator />} />
             <Route path="walk-in" element={<WalkInBooking />} />
             <Route path="enquiries" element={<EnquiryManagement />} />

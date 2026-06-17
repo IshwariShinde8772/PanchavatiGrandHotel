@@ -6,7 +6,7 @@ import { authAPI } from "../../api/authAPI";
 
 function redirectPathForRole(role) {
   if (role === "admin") return "/admin";
-  if (["receptionist", "manager"].includes(role)) return "/receptionist";
+  if (["reception", "receptionist", "manager"].includes(role)) return "/receptionist";
   if (["housekeeping", "kitchen", "server"].includes(role)) return "/worker";
   return "/customer";
 }
@@ -22,7 +22,11 @@ export default function AuthCallback() {
       const error = searchParams.get("error");
 
       if (error) {
-        toast.error(`Authentication failed: ${error}`);
+        if (error === "google_not_configured") {
+          toast.error("Google login is not configured. Please contact support or use email/password login.");
+        } else {
+          toast.error(`Authentication failed: ${error}`);
+        }
         navigate("/login", { replace: true });
         return;
       }
@@ -56,4 +60,3 @@ export default function AuthCallback() {
     </div>
   );
 }
-

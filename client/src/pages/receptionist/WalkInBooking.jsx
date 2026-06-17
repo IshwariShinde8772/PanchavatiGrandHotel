@@ -10,6 +10,10 @@ import { bookingAPI } from "../../api/bookingAPI";
 import { roomAPI } from "../../api/roomAPI";
 import { formatCurrency } from "../../utils/formatCurrency";
 
+function todayDateInput() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function WalkInBooking() {
   const [form, setForm] = useState({
     guest_name: "",
@@ -19,7 +23,7 @@ export default function WalkInBooking() {
     id_number: "",
     room_id: "",
     guests: 1,
-    check_in: new Date().toISOString().slice(0, 10),
+    check_in: todayDateInput(),
     check_out: "",
     payment_method: "cash",
     special_requests: ""
@@ -40,7 +44,7 @@ export default function WalkInBooking() {
       setForm({
         guest_name: "", phone: "", nationality: "Indian", id_type: "national_id",
         id_number: "", room_id: "", guests: 1,
-        check_in: new Date().toISOString().slice(0, 10), check_out: "", payment_method: "cash", special_requests: ""
+        check_in: todayDateInput(), check_out: "", payment_method: "cash", special_requests: ""
       });
     },
     onError: (err) => toast.error(err.response?.data?.error || "Failed to create booking")
@@ -49,6 +53,16 @@ export default function WalkInBooking() {
   const handleCreate = () => {
     if (!form.guest_name || !form.phone || !form.room_id || !form.check_in || !form.check_out) {
       toast.error("Please fill in all required fields (Name, Phone, Room, and Dates)");
+      return;
+    }
+
+    if (new Date(form.check_in) < new Date(todayDateInput())) {
+      toast.error("Check-in date cannot be in the past");
+      return;
+    }
+
+    if (new Date(form.check_out) <= new Date(form.check_in)) {
+      toast.error("Check-out date must be after check-in date");
       return;
     }
 
@@ -151,8 +165,27 @@ export default function WalkInBooking() {
                <Calendar size={20} className="text-saffron" /> Stay & Payment Details
             </h3>
             <div className="grid gap-6 md:grid-cols-3">
-              <InputField label="Check-In *" type="date" value={form.check_in} onChange={(e) => setForm({ ...form, check_in: e.target.value })} />
-              <InputField label="Check-Out *" type="date" value={form.check_out} onChange={(e) => setForm({ ...form, check_out: e.target.value })} />
+              <InputField
+                label="Check-In *"
+                type="date"
+                min={todayDateInput()}
+                value={form.check_in}
+                onChange={(e) => {
+                  const nextCheckIn = e.target.value;
+                  const nextState = { ...form, check_in: nextCheckIn };
+                  if (form.check_out && new Date(form.check_out) <= new Date(nextCheckIn)) {
+                    nextState.check_out = "";
+                  }
+                  setForm(nextState);
+                }}
+              />
+              <InputField
+                label="Check-Out *"
+                type="date"
+                min={form.check_in || todayDateInput()}
+                value={form.check_out}
+                onChange={(e) => setForm({ ...form, check_out: e.target.value })}
+              />
               <InputField label="Guest Count" type="number" min="1" value={form.guests} onChange={(e) => setForm({ ...form, guests: Number(e.target.value) })} />
             </div>
             <div className="grid gap-6 md:grid-cols-2 mt-6">

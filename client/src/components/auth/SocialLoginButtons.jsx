@@ -1,6 +1,19 @@
+import toast from "react-hot-toast";
+
 export default function SocialLoginButtons() {
   const handleGoogleLogin = () => {
-    window.location.href = `${import.meta.env.VITE_API_URL || "http://localhost:5000"}/api/auth/google`;
+    const rawBase =
+      import.meta.env.VITE_API_BASE_URL
+      || import.meta.env.VITE_API_URL
+      || "http://localhost:5000/api";
+    const apiOrigin = String(rawBase).replace(/\/+$/g, "").replace(/\/api$/i, "");
+
+    if (!apiOrigin) {
+      toast.error("Google login is not configured on this client.");
+      return;
+    }
+
+    window.location.href = `${apiOrigin}/api/auth/google`;
   };
 
   return (

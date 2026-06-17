@@ -20,7 +20,7 @@ export default function ManageStaff() {
 
   const staff = staffResponse?.data || [];
 
-  const [form, setForm] = useState({ full_name: "", role: "receptionist", email: "", phone: "", password: "" });
+  const [form, setForm] = useState({ full_name: "", role: "reception", email: "", phone: "", password: "" });
 
   const createMutation = useMutation({
     mutationFn: staffAPI.create,
@@ -28,7 +28,7 @@ export default function ManageStaff() {
       queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
       toast.success("Staff member created successfully");
       setModalOpen(false);
-      setForm({ full_name: "", role: "receptionist", email: "", phone: "", password: "" });
+      setForm({ full_name: "", role: "reception", email: "", phone: "", password: "" });
 
       if (data.email_delivery && data.email_delivery.success === false) {
         toast.error("Staff account saved, but welcome email could not be delivered.");
@@ -82,7 +82,7 @@ export default function ManageStaff() {
 
   const handleOpenAdd = () => {
     setEditingStaff(null);
-    setForm({ full_name: "", role: "receptionist", email: "", phone: "", password: "" });
+    setForm({ full_name: "", role: "reception", email: "", phone: "", password: "" });
     setModalOpen(true);
   };
 
@@ -107,6 +107,7 @@ export default function ManageStaff() {
   const handleSave = () => {
     if (editingStaff) {
       const payload = { ...form };
+      delete payload.role;
       delete payload.password; // Don't update password on edit
       updateMutation.mutate({ id: editingStaff.id, payload });
     } else {
@@ -128,7 +129,7 @@ export default function ManageStaff() {
       <PageHeader 
         eyebrow="Manage Staff" 
         title="Team roster and account controls" 
-        description="Create, edit, deactivate, and reset credentials for hotel staff. Receptionists/managers use the desk portal, and housekeeping/kitchen/server teams use the worker portal." 
+        description="Create, edit, deactivate, and reset credentials for hotel staff. New staff created from this panel are limited to Reception access." 
         actions={<Button onClick={handleOpenAdd}>Add Staff</Button>} 
       />
       
@@ -175,18 +176,22 @@ export default function ManageStaff() {
                 value={form.phone} 
                 onChange={(e) => setForm({ ...form, phone: e.target.value })} 
               />
-              <SelectField 
-                label="Role" 
-                value={form.role} 
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-                options={[
-                  { label: "Receptionist", value: "receptionist" },
-                  { label: "Housekeeping", value: "housekeeping" },
-                  { label: "Kitchen", value: "kitchen" },
-                  { label: "Server", value: "server" },
-                  { label: "Manager", value: "manager" }
-                ]}
-              />
+              {editingStaff ? (
+                <InputField
+                  label="Role"
+                  value={editingStaff.role}
+                  readOnly
+                />
+              ) : (
+                <SelectField 
+                  label="Role" 
+                  value={form.role} 
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  options={[
+                    { label: "Reception", value: "reception" },
+                  ]}
+                />
+              )}
               {!editingStaff && (
                 <div>
                   <label className="mb-2 block text-sm font-semibold">Password (Leave empty to auto-generate)</label>
@@ -235,10 +240,14 @@ export default function ManageStaff() {
                     value={passwordModal.password}
                     className="flex-1 rounded border border-gray-300 bg-white px-3 py-2 font-mono text-sm font-bold"
                   />
-                  <Button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(passwordModal.password);
-                      toast.success("Password copied to clipboard");
+                  <Button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(passwordModal.password);
+                        toast.success("Temporary password copied successfully");
+                      } catch (error) {
+                        toast.error("Unable to copy temporary password");
+                      }
                     }}
                     variant="outline"
                   >

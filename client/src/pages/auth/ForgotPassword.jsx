@@ -5,42 +5,37 @@ import { authAPI } from "../../api/authAPI";
 import InputField from "../../components/forms/InputField";
 import Button from "../../components/common/Button";
 
-const roleOptions = [
-  { value: "", label: "Auto detect role" },
-  { value: "customer", label: "Customer" },
-  { value: "admin", label: "Admin" },
-  { value: "receptionist", label: "Receptionist" },
-  { value: "manager", label: "Manager" },
-  { value: "housekeeping", label: "Housekeeping" },
-  { value: "kitchen", label: "Kitchen" },
-  { value: "server", label: "Server" },
-];
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ForgotPassword() {
-  const [identifier, setIdentifier] = useState("");
-  const [role, setRole] = useState("");
+  const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const trimmedIdentifier = identifier.trim();
-    if (!trimmedIdentifier) {
-      toast.error("Enter your email or username");
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      toast.error("Enter your email address");
+      return;
+    }
+
+    if (!emailPattern.test(trimmedEmail)) {
+      toast.error("Enter a valid email address");
       return;
     }
 
     setIsSubmitting(true);
+    setSubmitted(false);
 
     try {
       const response = await authAPI.forgotPassword({
-        identifier: trimmedIdentifier,
-        role: role || undefined,
+        email: trimmedEmail,
       });
 
       setSubmitted(true);
-      toast.success(response?.message || "If an account exists, reset instructions have been sent.");
+      toast.success(response?.message || "Password reset link sent to your email.");
     } catch (error) {
       toast.error(error?.response?.data?.error || "Unable to process request. Please try again.");
     } finally {
@@ -59,39 +54,19 @@ export default function ForgotPassword() {
             Forgot Password
           </h1>
           <p className="mt-2 text-sm" style={{ color: "#526359" }}>
-            Enter your account details and we will send reset instructions.
+            Enter your email and we will send a reset link.
           </p>
         </div>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           <InputField
-            label="Email or Username"
-            value={identifier}
-            onChange={(event) => setIdentifier(event.target.value)}
+            label="Email Address"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
             placeholder="you@example.com"
             required
           />
-
-          <label className="block">
-            <span
-              className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em]"
-              style={{ color: "#526359" }}
-            >
-              Role (Optional)
-            </span>
-            <select
-              value={role}
-              onChange={(event) => setRole(event.target.value)}
-              className="w-full py-3 outline-none transition-all border-b-2 bg-transparent text-sm"
-              style={{ borderColor: "#E5EBE7", color: "#0D1B15" }}
-            >
-              {roleOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? "Sending..." : "Send Reset Link"}
@@ -103,7 +78,7 @@ export default function ForgotPassword() {
             className="mt-6 rounded-lg border px-4 py-3 text-sm"
             style={{ borderColor: "#D1E7DD", backgroundColor: "#F3FBF6", color: "#0A4D34" }}
           >
-            If an account exists, reset instructions have been sent.
+            Password reset link sent to your email.
           </div>
         ) : null}
 

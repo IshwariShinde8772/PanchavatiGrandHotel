@@ -13,6 +13,7 @@ export const bookingAPI = {
   checkIn: (id, payload) => axiosInstance.post(`/receptionist/bookings/${id}/check-in`, payload).then((res) => res.data),
   checkOut: (id, payload) => axiosInstance.post(`/receptionist/bookings/${id}/check-out`, payload).then((res) => res.data),
   extend: (id, payload) => axiosInstance.post(`/receptionist/bookings/${id}/extend`, payload).then((res) => res.data),
+  postponeCheckIn: (id, payload) => axiosInstance.post(`/receptionist/bookings/${id}/postpone`, payload).then((res) => res.data),
   receptionistList: (params) => axiosInstance.get("/receptionist/bookings", { params }).then((res) => res.data),
   listExtensionRequests: () => axiosInstance.get("/receptionist/extensions").then((res) => res.data),
   processExtensionRequest: (id, payload) => axiosInstance.patch(`/receptionist/extensions/${id}/process`, payload).then((res) => res.data),

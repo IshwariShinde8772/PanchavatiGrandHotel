@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
-import { Search, RefreshCw, LogIn, LogOut, FileText, User, Calendar, Clock, Edit } from "lucide-react";
+import { Search, RefreshCw, LogIn, LogOut, FileText, User, Calendar, Edit } from "lucide-react";
 import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
 import SelectField from "../../components/forms/SelectField";
@@ -18,24 +18,66 @@ const STATUS_OPTIONS = [
   { label: "Cancelled", value: "cancelled" },
 ];
 
-const TABS = [
-  { id: "overview", label: "Overview", icon: User },
-  { id: "checkinout", label: "Check-in/Out", icon: LogIn },
-  { id: "extend", label: "Extend/Postpone", icon: Calendar },
-  { id: "details", label: "Customer Details", icon: FileText },
-];
+function todayDateInput() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDays(dateValue, days) {
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) {
+    return todayDateInput();
+  }
+
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isCheckedInStatus(status) {
+  return status === "checked_in";
+}
+
+function canPostponeStatus(status) {
+  return ["pending", "confirmed"].includes(status);
+}
+
+function getTabsForBooking(status) {
+  if (isCheckedInStatus(status)) {
+    return [
+      { id: "overview", label: "View Booking", icon: User },
+      { id: "checkinout", label: "Check Out", icon: LogOut },
+      { id: "extend", label: "Extend Stay", icon: Calendar },
+    ];
+  }
+
+  return [
+    { id: "overview", label: "View Booking", icon: User },
+    { id: "checkinout", label: "Check-in/Out", icon: LogIn },
+    { id: "extend", label: "Postpone", icon: Edit },
+    { id: "details", label: "Customer Details", icon: FileText },
+  ];
+}
 
 export default function ManageBookings() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [filter, setFilter] = useState({ 
-    q: searchParams.get("ref") || "", 
-    status: "" 
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState({
+    q: searchParams.get("ref") || "",
+    status: "",
   });
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [extendData, setExtendData] = useState({ check_out: "", reason: "" });
+  const [postponeData, setPostponeData] = useState({ check_in: "", reason: "" });
+
+  useEffect(() => {
+    if (!selectedBooking) {
+      return;
+    }
+
+    setExtendData({ check_out: "", reason: "" });
+    setPostponeData({ check_in: addDays(selectedBooking.check_in, 1), reason: "" });
+  }, [selectedBooking]);
 
   const { data: res, isLoading, refetch } = useQuery({
     queryKey: ["receptionist-bookings", filter],
@@ -43,11 +85,37 @@ export default function ManageBookings() {
   });
 
   const bookings = res?.data || [];
+  const selectedStatus = selectedBooking?.status || "";
+  const canPostponeBooking = canPostponeStatus(selectedStatus);
+  const availableTabs = useMemo(() => getTabsForBooking(selectedStatus), [selectedStatus]);
+
+  useEffect(() => {
+    if (!availableTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab("overview");
+    }
+  }, [activeTab, availableTabs]);
+
+  useEffect(() => {
+    if (!selectedBooking) {
+      return;
+    }
+
+    const refreshedBooking = bookings.find((booking) => booking.id === selectedBooking.id);
+    if (!refreshedBooking) {
+      setSelectedBooking(null);
+      return;
+    }
+
+    if (refreshedBooking !== selectedBooking) {
+      setSelectedBooking(refreshedBooking);
+    }
+  }, [bookings, selectedBooking]);
 
   const checkInMutation = useMutation({
     mutationFn: (id) => bookingAPI.checkIn(id, { id_verified: true }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["receptionist-bookings"] });
+      setSelectedBooking(data?.data || selectedBooking);
       toast.success("Guest checked in successfully");
     },
     onError: (e) => toast.error(e.response?.data?.error || "Check-in failed"),
@@ -55,8 +123,9 @@ export default function ManageBookings() {
 
   const checkOutMutation = useMutation({
     mutationFn: (id) => bookingAPI.checkOut(id, { payment_status: "paid" }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["receptionist-bookings"] });
+      setSelectedBooking(data?.data || selectedBooking);
       toast.success("Guest checked out successfully");
     },
     onError: (e) => toast.error(e.response?.data?.error || "Check-out failed"),
@@ -67,13 +136,31 @@ export default function ManageBookings() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["receptionist-bookings"] });
       setExtendData({ check_out: "", reason: "" });
+      setSelectedBooking(data.data || selectedBooking);
       setActiveTab("overview");
       toast.success(`Booking extended successfully. Extra charges: ${formatCurrency(data.extra_charges)}`);
     },
     onError: (e) => toast.error(e.response?.data?.error || "Extension failed"),
   });
 
+  const postponeBookingMutation = useMutation({
+    mutationFn: ({ id, payload }) => bookingAPI.postponeCheckIn(id, payload),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["receptionist-bookings"] });
+      setPostponeData({ check_in: "", reason: "" });
+      setSelectedBooking(data.data || selectedBooking);
+      setActiveTab("overview");
+      toast.success("Check-in postponed successfully");
+    },
+    onError: (e) => toast.error(e.response?.data?.error || "Unable to postpone check-in"),
+  });
+
   const handleExtendBooking = () => {
+    if (!isCheckedInStatus(selectedBooking?.status)) {
+      toast.error("Only checked-in bookings can be extended.");
+      return;
+    }
+
     if (!extendData.check_out || !extendData.reason) {
       toast.error("Please fill in all required fields");
       return;
@@ -84,7 +171,32 @@ export default function ManageBookings() {
       payload: {
         check_out: extendData.check_out,
         reason: extendData.reason,
-        payment_method: "cash", // Default to cash for receptionist extensions
+        payment_method: "cash",
+      },
+    });
+  };
+
+  const handlePostponeBooking = () => {
+    if (isCheckedInStatus(selectedBooking?.status)) {
+      toast.error("Checked-in bookings cannot be postponed.");
+      return;
+    }
+
+    if (!canPostponeStatus(selectedBooking?.status)) {
+      toast.error("Check-in can only be postponed for pending or confirmed bookings.");
+      return;
+    }
+
+    if (!postponeData.check_in || !postponeData.reason) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    postponeBookingMutation.mutate({
+      id: selectedBooking.id,
+      payload: {
+        check_in: postponeData.check_in,
+        reason: postponeData.reason,
       },
     });
   };
@@ -136,29 +248,28 @@ export default function ManageBookings() {
       case "checkinout":
         return (
           <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-6">
-              <div className="bg-gray-50 p-6 rounded-lg">
-                <h3 className="font-bold text-vineyard mb-4 flex items-center gap-2">
-                  <LogIn size={20} /> Check-in
-                </h3>
-                <div className="space-y-3 mb-4">
-                  <p><strong>Check-in Date:</strong> {selectedBooking.check_in}</p>
-                  <p><strong>Room:</strong> {selectedBooking.room?.room_number}</p>
-                  <p><strong>Status:</strong> {selectedBooking.status}</p>
+            <div className={`grid gap-6 ${isCheckedInStatus(selectedBooking.status) ? "grid-cols-1" : "grid-cols-2"}`}>
+              {!isCheckedInStatus(selectedBooking.status) ? (
+                <div className="bg-gray-50 p-6 rounded-lg">
+                  <h3 className="font-bold text-vineyard mb-4 flex items-center gap-2">
+                    <LogIn size={20} /> Check-in
+                  </h3>
+                  <div className="space-y-3 mb-4">
+                    <p><strong>Check-in Date:</strong> {selectedBooking.check_in}</p>
+                    <p><strong>Room:</strong> {selectedBooking.room?.room_number}</p>
+                    <p><strong>Status:</strong> {selectedBooking.status}</p>
+                  </div>
+                  {selectedBooking.status === "confirmed" && (
+                    <Button
+                      onClick={() => checkInMutation.mutate(selectedBooking.id)}
+                      className="w-full bg-godavari hover:bg-godavari/90"
+                      disabled={checkInMutation.isPending}
+                    >
+                      {checkInMutation.isPending ? "Checking in..." : "Check-in Guest"}
+                    </Button>
+                  )}
                 </div>
-                {selectedBooking.status === "confirmed" && (
-                  <Button 
-                    onClick={() => checkInMutation.mutate(selectedBooking.id)}
-                    className="w-full bg-godavari hover:bg-godavari/90"
-                    disabled={checkInMutation.isPending}
-                  >
-                    {checkInMutation.isPending ? "Checking in..." : "Check-in Guest"}
-                  </Button>
-                )}
-                {selectedBooking.status === "checked_in" && (
-                  <div className="text-green-600 font-semibold">✓ Guest is checked in</div>
-                )}
-              </div>
+              ) : null}
 
               <div className="bg-gray-50 p-6 rounded-lg">
                 <h3 className="font-bold text-vineyard mb-4 flex items-center gap-2">
@@ -170,7 +281,7 @@ export default function ManageBookings() {
                   <p><strong>Status:</strong> {selectedBooking.status}</p>
                 </div>
                 {selectedBooking.status === "checked_in" && (
-                  <Button 
+                  <Button
                     onClick={() => checkOutMutation.mutate(selectedBooking.id)}
                     className="w-full bg-saffron hover:bg-saffron/90"
                     disabled={checkOutMutation.isPending}
@@ -179,7 +290,7 @@ export default function ManageBookings() {
                   </Button>
                 )}
                 {selectedBooking.status === "checked_out" && (
-                  <div className="text-blue-600 font-semibold">✓ Guest has checked out</div>
+                  <div className="text-blue-600 font-semibold">Guest has checked out.</div>
                 )}
               </div>
             </div>
@@ -187,25 +298,70 @@ export default function ManageBookings() {
         );
 
       case "extend":
+        if (isCheckedInStatus(selectedBooking.status)) {
+          return (
+            <div className="space-y-6">
+              <div className="max-w-3xl bg-gray-50 p-6 rounded-lg">
+                <h3 className="font-bold text-vineyard mb-4 flex items-center gap-2">
+                  <Calendar size={20} /> Extend Stay
+                </h3>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Current Check-out</label>
+                    <p className="text-lg font-semibold">{selectedBooking.check_out}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">New Check-out Date</label>
+                    <input
+                      type="date"
+                      className="w-full p-2 border rounded-lg"
+                      value={extendData.check_out}
+                      onChange={(e) => setExtendData({ ...extendData, check_out: e.target.value })}
+                      min={addDays(selectedBooking.check_out, 1)}
+                    />
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-1">Reason</label>
+                  <textarea
+                    className="w-full p-2 border rounded-lg"
+                    rows={3}
+                    placeholder="Reason for extension..."
+                    value={extendData.reason}
+                    onChange={(e) => setExtendData({ ...extendData, reason: e.target.value })}
+                  />
+                </div>
+                <Button
+                  onClick={handleExtendBooking}
+                  className="w-full bg-vineyard hover:bg-vineyard/90"
+                  disabled={extendBookingMutation.isPending}
+                >
+                  {extendBookingMutation.isPending ? "Updating..." : "Extend Booking"}
+                </Button>
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div className="space-y-6">
-            <div className="bg-gray-50 p-6 rounded-lg">
+            <div className="max-w-3xl bg-gray-50 p-6 rounded-lg">
               <h3 className="font-bold text-vineyard mb-4 flex items-center gap-2">
-                <Calendar size={20} /> Extend/Postpone Booking
+                <Edit size={20} /> Postpone Check-in
               </h3>
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Current Check-out</label>
-                  <p className="text-lg font-semibold">{selectedBooking.check_out}</p>
+                  <label className="block text-sm font-medium mb-1">Current Check-in</label>
+                  <p className="text-lg font-semibold">{selectedBooking.check_in}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">New Check-out Date</label>
+                  <label className="block text-sm font-medium mb-1">New Check-in Date</label>
                   <input
                     type="date"
                     className="w-full p-2 border rounded-lg"
-                    value={extendData.check_out}
-                    onChange={(e) => setExtendData({ ...extendData, check_out: e.target.value })}
-                    min={selectedBooking.check_out}
+                    value={postponeData.check_in}
+                    onChange={(e) => setPostponeData({ ...postponeData, check_in: e.target.value })}
+                    min={todayDateInput()}
                   />
                 </div>
               </div>
@@ -214,17 +370,23 @@ export default function ManageBookings() {
                 <textarea
                   className="w-full p-2 border rounded-lg"
                   rows={3}
-                  placeholder="Reason for extension..."
-                  value={extendData.reason}
-                  onChange={(e) => setExtendData({ ...extendData, reason: e.target.value })}
+                  placeholder="Reason for postponement..."
+                  value={postponeData.reason}
+                  onChange={(e) => setPostponeData({ ...postponeData, reason: e.target.value })}
                 />
               </div>
-              <Button 
-                onClick={handleExtendBooking}
-                className="w-full bg-vineyard hover:bg-vineyard/90"
+              <Button
+                onClick={handlePostponeBooking}
+                className="w-full bg-godavari hover:bg-godavari/90"
+                disabled={postponeBookingMutation.isPending || !canPostponeBooking}
               >
-                Extend Booking
+                {postponeBookingMutation.isPending ? "Updating..." : "Postpone Check-in"}
               </Button>
+              {!canPostponeBooking ? (
+                <p className="mt-2 text-xs text-mutedText">
+                  Check-in can only be postponed for pending or confirmed bookings.
+                </p>
+              ) : null}
             </div>
           </div>
         );
@@ -283,19 +445,18 @@ export default function ManageBookings() {
 
   return (
     <div className="space-y-6 pb-12">
-      <PageHeader 
-        eyebrow="Bookings Management" 
-        title="Check-in / Check-out Desk" 
-        description="Search by guest name or room. Manage arrivals, departures, and generate tax invoices." 
+      <PageHeader
+        eyebrow="Bookings Management"
+        title="Check-in / Check-out Desk"
+        description="Search by guest name or room. Manage arrivals, departures, and generate tax invoices."
       />
 
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Booking List */}
         <div className="lg:col-span-1">
           <div className="section-card p-4">
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-mutedText" size={18} />
-              <input 
+              <input
                 type="text"
                 placeholder="Search by name, phone, room..."
                 className="w-full pl-10 pr-4 py-2 rounded-xl border-2 border-divider focus:border-saffron outline-none text-sm"
@@ -304,14 +465,14 @@ export default function ManageBookings() {
               />
             </div>
             <div className="w-full mb-4">
-              <SelectField 
+              <SelectField
                 value={filter.status}
                 onChange={(e) => setFilter({ ...filter, status: e.target.value })}
                 options={STATUS_OPTIONS}
               />
             </div>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => refetch()}
               className="w-full flex items-center justify-center gap-2 border-godavari text-godavari mb-4"
             >
@@ -321,19 +482,19 @@ export default function ManageBookings() {
             <div className="space-y-2 max-h-96 overflow-y-auto">
               {isLoading ? (
                 <p className="p-4 text-center text-mutedText">Loading bookings...</p>
-              ) : bookings.map((b) => (
-                <button 
-                  key={b.id}
-                  onClick={() => setSelectedBooking(b)}
+              ) : bookings.map((booking) => (
+                <button
+                  key={booking.id}
+                  onClick={() => setSelectedBooking(booking)}
                   className={`w-full p-3 text-left transition-colors rounded-lg border ${
-                    selectedBooking?.id === b.id 
-                      ? "bg-green-50 border-godavari" 
+                    selectedBooking?.id === booking.id
+                      ? "bg-green-50 border-godavari"
                       : "bg-white border-divider hover:bg-gray-50"
                   }`}
                 >
-                  <p className="font-bold text-vineyard text-sm">{b.customer?.full_name}</p>
-                  <p className="text-[10px] text-mutedText">Room {b.room?.room_number} - {b.room?.category}</p>
-                  <p className="text-xs font-semibold text-saffron">{formatCurrency(b.total_amount)}</p>
+                  <p className="font-bold text-vineyard text-sm">{booking.customer?.full_name}</p>
+                  <p className="text-[10px] text-mutedText">Room {booking.room?.room_number} - {booking.room?.category}</p>
+                  <p className="text-xs font-semibold text-saffron">{formatCurrency(booking.total_amount)}</p>
                 </button>
               ))}
               {bookings.length === 0 && !isLoading && (
@@ -343,13 +504,11 @@ export default function ManageBookings() {
           </div>
         </div>
 
-        {/* Booking Details */}
         <div className="lg:col-span-2">
           <div className="section-card">
-            {/* Tabs */}
             <div className="border-b border-divider">
               <div className="flex">
-                {TABS.map((tab) => {
+                {availableTabs.map((tab) => {
                   const Icon = tab.icon;
                   return (
                     <button
@@ -369,16 +528,14 @@ export default function ManageBookings() {
               </div>
             </div>
 
-            {/* Tab Content */}
             <div className="p-6">
               {renderTabContent()}
             </div>
 
-            {/* Action Buttons */}
             {selectedBooking && (
               <div className="border-t border-divider p-6">
                 <div className="flex gap-3">
-                  <Button 
+                  <Button
                     onClick={() => navigate(`/receptionist/bill-generator?ref=${selectedBooking.booking_ref}`)}
                     className="flex items-center gap-2 bg-white border border-divider text-mutedText hover:bg-gray-50"
                   >

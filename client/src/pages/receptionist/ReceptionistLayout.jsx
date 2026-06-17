@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, DoorClosed, LayoutDashboard, Receipt, UserCheck, Wrench, MessageSquare, History, BookOpen, Calendar } from "lucide-react";
+import { Bell, ClipboardList, DoorClosed, LayoutDashboard, Receipt, UserCheck, Wrench, MessageSquare, History, BookOpen, Calendar } from "lucide-react";
 import { Outlet } from "react-router-dom";
 import PortalShell from "../../layout/PortalShell";
 
@@ -8,7 +8,7 @@ const items = [
   { label: "Reserved Rooms", to: "/receptionist/reserved-rooms", icon: BookOpen },
   { label: "Room Grid", to: "/receptionist/room-grid", icon: DoorClosed },
   { label: "Check-In/Out", to: "/receptionist/check-in-out", icon: UserCheck },
-  { label: "Cleaning Queue", to: "/receptionist/tasks", icon: ClipboardCheck },
+  { label: "Notifications", to: "/receptionist/notifications", icon: Bell },
   { label: "Enquiries", to: "/receptionist/enquiries", icon: MessageSquare },
   { label: "Extensions", to: "/receptionist/extensions", icon: Calendar },
   { label: "Bill Generator", to: "/receptionist/bill-generator", icon: Receipt },

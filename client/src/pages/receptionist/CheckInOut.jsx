@@ -77,7 +77,6 @@ export default function CheckInOut() {
     queryClient.invalidateQueries({ queryKey: ["receptionist-checkinout-bookings"] });
     queryClient.invalidateQueries({ queryKey: ["receptionist-dashboard"] });
     queryClient.invalidateQueries({ queryKey: ["receptionist-room-grid"] });
-    queryClient.invalidateQueries({ queryKey: ["receptionist-cleaning-queue"] });
     queryClient.invalidateQueries({ queryKey: ["receptionist-tasks"] });
   };
 
@@ -336,4 +335,3 @@ export default function CheckInOut() {
     </div>
   );
 }
-

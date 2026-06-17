@@ -1,6 +1,6 @@
 import Button from "../common/Button";
 
-export default function PaymentWidget({ onPayOnline }) {
+export default function PaymentWidget({ onPayOnline, busy = false }) {
   return (
     <div className="rounded-[28px] border border-divider bg-white p-5">
       <h3 className="font-heading text-2xl">Pay With QR</h3>
@@ -10,7 +10,9 @@ export default function PaymentWidget({ onPayOnline }) {
           <div key={item} className="rounded-2xl bg-saffronLight p-4 text-sm">{item}</div>
         ))}
       </div>
-      <Button className="mt-5 w-full" onClick={onPayOnline}>Generate QR Payment</Button>
+      <Button className="mt-5 w-full" onClick={onPayOnline} disabled={busy}>
+        {busy ? "Generating QR..." : "Generate QR Payment"}
+      </Button>
     </div>
   );
 }

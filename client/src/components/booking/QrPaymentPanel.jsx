@@ -9,6 +9,32 @@ function formatTime(seconds) {
   return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
+function buildFallbackQrImage(transaction) {
+  const label = transaction?.booking_ref || transaction?.payment_reference || "TEST";
+  const amount = transaction?.amount ? `INR ${transaction.amount}` : "INR --";
+  const payload = transaction?.qr_payload || "upi://pay";
+  const escapedPayload = String(payload).slice(0, 42).replace(/[<>&"]/g, "");
+  const escapedLabel = String(label).replace(/[<>&"]/g, "");
+  const escapedAmount = String(amount).replace(/[<>&"]/g, "");
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="280" height="280" viewBox="0 0 280 280">
+      <rect width="280" height="280" fill="#ffffff"/>
+      <rect x="20" y="20" width="240" height="240" fill="#f8fafc" stroke="#0A4D34" stroke-width="2"/>
+      <rect x="44" y="44" width="52" height="52" fill="#0A4D34"/>
+      <rect x="184" y="44" width="52" height="52" fill="#0A4D34"/>
+      <rect x="44" y="184" width="52" height="52" fill="#0A4D34"/>
+      <rect x="116" y="116" width="48" height="48" fill="#C8440A"/>
+      <text x="140" y="198" text-anchor="middle" font-size="11" fill="#0A4D34" font-family="Arial, sans-serif">TEST QR</text>
+      <text x="140" y="214" text-anchor="middle" font-size="11" fill="#0A4D34" font-family="Arial, sans-serif">${escapedAmount}</text>
+      <text x="140" y="230" text-anchor="middle" font-size="10" fill="#526359" font-family="Arial, sans-serif">${escapedLabel}</text>
+      <text x="140" y="246" text-anchor="middle" font-size="8" fill="#526359" font-family="Arial, sans-serif">${escapedPayload}</text>
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export default function QrPaymentPanel({
   transaction,
   title = "Scan QR to Pay",
@@ -33,6 +59,7 @@ export default function QrPaymentPanel({
   }, [now, transaction?.qr_expires_at]);
 
   const expired = transaction?.is_expired || secondsRemaining <= 0 || transaction?.status === "expired";
+  const qrImage = transaction?.qr_image_url || buildFallbackQrImage(transaction);
 
   return (
     <div className="rounded-[28px] border border-divider bg-white p-5">
@@ -48,9 +75,9 @@ export default function QrPaymentPanel({
         </p>
       </div>
 
-      {!expired && transaction?.qr_image_url ? (
+      {!expired ? (
         <div className="mt-5 flex justify-center">
-          <img src={transaction.qr_image_url} alt="Payment QR" className="h-60 w-60 rounded-2xl border border-divider bg-white p-3" />
+          <img src={qrImage} alt="Payment QR" className="h-60 w-60 rounded-2xl border border-divider bg-white p-3" />
         </div>
       ) : (
         <div className="mt-5 rounded-2xl border border-dashed border-red-200 bg-red-50 px-4 py-8 text-center text-sm text-red-600">

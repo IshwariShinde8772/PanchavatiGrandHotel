@@ -15,6 +15,7 @@ export default function Login() {
   const [mode, setMode] = useState("email");
   const [otpSent, setOtpSent] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
+  const [otpCooldown, setOtpCooldown] = useState(0);
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -29,7 +30,23 @@ export default function Login() {
     if (searchParams.get("reason") === "session_expired") {
       toast.error("Your session expired. Please login again.");
     }
+
+    if (searchParams.get("error") === "google_not_configured") {
+      toast.error("Google login is not configured right now. Please use email/password login.");
+    }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (otpCooldown <= 0) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setOtpCooldown((seconds) => Math.max(seconds - 1, 0));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [otpCooldown]);
 
   const sendOtp = async () => {
     const normalizedPhone = normalizePhoneNumber(form.phone);
@@ -43,10 +60,14 @@ export default function Login() {
       await authAPI.sendOtp({ phone: normalizedPhone });
       setForm((prev) => ({ ...prev, phone: normalizedPhone, otp: "" }));
       setOtpSent(true);
+      setOtpCooldown(60);
       toast.success("OTP sent to your phone");
     } catch (error) {
       const validationErrors = error?.response?.data?.details?.fieldErrors?.phone;
-      toast.error(validationErrors?.[0] || error?.response?.data?.error || "Failed to send OTP");
+      const message = validationErrors?.[0] || error?.response?.data?.error || "Failed to send OTP";
+      setOtpSent(false);
+      setOtpCooldown(0);
+      toast.error(message);
     } finally {
       setOtpSending(false);
     }
@@ -94,7 +115,7 @@ export default function Login() {
       let from = location.state?.redirectTo || location.state?.from?.pathname || redirectFromQuery;
       if (!from || from === "/login") {
         if (loggedInRole === "admin") from = "/admin";
-        else if (["receptionist", "manager"].includes(loggedInRole)) from = "/receptionist";
+        else if (["reception", "receptionist", "manager"].includes(loggedInRole)) from = "/receptionist";
         else if (["housekeeping", "kitchen", "server"].includes(loggedInRole)) from = "/worker";
         else from = "/";
       }
@@ -181,6 +202,7 @@ export default function Login() {
                   if (otpSent) {
                     setOtpSent(false);
                   }
+                  setOtpCooldown(0);
                 }}
                 placeholder="9876543210 or +919876543210"
                 required
@@ -212,10 +234,10 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={sendOtp}
-                    disabled={otpSending}
+                    disabled={otpSending || otpCooldown > 0}
                     className="w-full py-2 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-60"
                   >
-                    {otpSending ? "Resending..." : "Resend OTP"}
+                    {otpSending ? "Resending..." : otpCooldown > 0 ? `Resend OTP in ${otpCooldown}s` : "Resend OTP"}
                   </button>
                 </>
               )}

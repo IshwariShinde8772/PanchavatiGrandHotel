@@ -7,8 +7,12 @@ const axiosInstance = axios.create({
 
 let isHandlingUnauthorizedRedirect = false;
 
+function isBrowser() {
+  return typeof window !== "undefined";
+}
+
 function readTokenFromPersistedStore() {
-  if (typeof window === "undefined") {
+  if (!isBrowser()) {
     return null;
   }
 
@@ -40,6 +44,26 @@ function isAuthEndpoint(config) {
   return /\/auth\/(login|customer\/login|admin\/login|staff\/login|send-otp|verify-otp|forgot-password|reset-password|oauth\/exchange)/i.test(url);
 }
 
+function redirectToLogin() {
+  if (!isBrowser() || isHandlingUnauthorizedRedirect) {
+    return;
+  }
+
+  const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (window.location.pathname === "/login") {
+    return;
+  }
+
+  isHandlingUnauthorizedRedirect = true;
+
+  const params = new URLSearchParams({ reason: "session_expired" });
+  if (currentPath && currentPath !== "/") {
+    params.set("redirectTo", currentPath);
+  }
+
+  window.location.assign(`/login?${params.toString()}`);
+}
+
 axiosInstance.interceptors.request.use((config) => {
   const token = getAuthToken() || useAuthStore.getState().token;
 
@@ -50,5 +74,17 @@ axiosInstance.interceptors.request.use((config) => {
 
   return config;
 });
+
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && !isAuthEndpoint(error.config)) {
+      useAuthStore.getState().logout();
+      redirectToLogin();
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export default axiosInstance;

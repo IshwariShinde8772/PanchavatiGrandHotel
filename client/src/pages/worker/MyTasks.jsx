@@ -33,7 +33,6 @@ export default function MyTasks() {
     mutationFn: ({ id, payload }) => workerAPI.updateMyTaskStatus(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["worker-my-tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["receptionist-cleaning-queue"] });
       toast.success("Task updated successfully");
     },
     onError: (error) => {
@@ -132,4 +131,3 @@ export default function MyTasks() {
     </div>
   );
 }
-

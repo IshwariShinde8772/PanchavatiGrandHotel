@@ -3,6 +3,10 @@ import PriceBreakdown from "../room/PriceBreakdown";
 
 export default function BookingSummary({ room, selection }) {
   if (!room) return null;
+  const pricing = room.pricing || {};
+  const basePrice = Number(pricing.basePrice ?? room.base_price ?? 0);
+  const finalPrice = Number(pricing.finalPrice ?? pricing.pricePerNight ?? room.base_price ?? 0);
+  const hasDiscount = Boolean(pricing.hasDiscount && pricing.discountAmount > 0);
   return (
     <div className="section-card p-5">
       <div className="flex items-center gap-4">
@@ -17,10 +21,20 @@ export default function BookingSummary({ room, selection }) {
         <p className="mt-1">Special requests: {selection.specialRequests || "None"}</p>
       </div>
       <div className="mt-4">
-        <PriceBreakdown pricePerNight={room.pricing?.pricePerNight || room.base_price} nights={selection.nights || 1} />
+        <PriceBreakdown
+          pricePerNight={finalPrice}
+          basePrice={basePrice}
+          finalPrice={finalPrice}
+          discountPct={pricing.discountPct}
+          discountAmount={pricing.discountAmount}
+          nights={selection.nights || 1}
+        />
       </div>
       <p className="mt-4 text-sm text-success">Free cancellation before 48 hours of arrival.</p>
-      <p className="mt-2 text-lg font-semibold text-saffron">From {formatCurrency(room.pricing?.pricePerNight || room.base_price)}</p>
+      {hasDiscount ? (
+        <p className="mt-2 text-sm text-mutedText line-through">Base: {formatCurrency(basePrice)}</p>
+      ) : null}
+      <p className="mt-1 text-lg font-semibold text-saffron">From {formatCurrency(finalPrice)}</p>
     </div>
   );
 }

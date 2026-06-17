@@ -54,6 +54,11 @@ export default function RoomCard({ room, compact = false, onSave }) {
   };
 
   const displayImage = room.images?.[0] || "/assets/images/placeholder-room.svg";
+  const pricing = room.pricing || {};
+  const basePrice = Number(pricing.basePrice ?? room.base_price ?? 0);
+  const finalPrice = Number(pricing.finalPrice ?? pricing.pricePerNight ?? room.base_price ?? 0);
+  const hasDiscount = Boolean(pricing.hasDiscount && pricing.discountAmount > 0);
+  const activeOffer = pricing.offer;
 
   return (
     <article className="section-card overflow-hidden h-full flex flex-col">
@@ -69,6 +74,7 @@ export default function RoomCard({ room, compact = false, onSave }) {
         <div className="flex flex-wrap items-center gap-2">
           <Badge color={room.category === "Deluxe" ? "gold" : room.category === "Presidential" ? "maroon" : "vineyard"}>{room.category}</Badge>
           {room.available ? <Badge color="vineyard">{room.urgencyLabel || "Available"}</Badge> : <Badge color="maroon">Sold Out</Badge>}
+          {activeOffer ? <Badge color="gold">{activeOffer.title}</Badge> : null}
         </div>
         <div>
           <div className="flex items-start justify-between gap-3">
@@ -77,7 +83,18 @@ export default function RoomCard({ room, compact = false, onSave }) {
               <p className="mt-1 text-sm text-mutedText">{room.nashik_landmark}</p>
             </div>
             <div className="text-right">
-              <p className="text-lg font-semibold text-saffron">{formatCurrency(room.pricing?.pricePerNight || room.base_price)}</p>
+              {hasDiscount ? (
+                <>
+                  <p className="text-xs text-mutedText line-through">{formatCurrency(basePrice)}</p>
+                  <p className="text-xs font-semibold text-success">
+                    {pricing.discountPct}% OFF • Save {formatCurrency(pricing.discountAmount)}
+                  </p>
+                  {activeOffer ? (
+                    <p className="text-xs font-semibold text-godavari">{activeOffer.room_category} offer</p>
+                  ) : null}
+                </>
+              ) : null}
+              <p className="text-lg font-semibold text-saffron">{formatCurrency(finalPrice)}</p>
               <p className="text-xs text-mutedText">per night</p>
             </div>
           </div>

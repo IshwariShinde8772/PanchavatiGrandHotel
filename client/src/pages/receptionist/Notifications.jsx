@@ -5,12 +5,7 @@ import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
 import InputField from "../../components/forms/InputField";
 import SelectField from "../../components/forms/SelectField";
-import { adminAPI } from "../../api/adminAPI";
-
-const targetRoleOptions = [
-  { label: "Reception", value: "reception" },
-  { label: "Customer", value: "customer" },
-];
+import { receptionistAPI } from "../../api/receptionistAPI";
 
 const typeOptions = [
   { label: "System", value: "system" },
@@ -32,11 +27,10 @@ function relativeTime(dateValue) {
   return `${Math.floor(diffInSeconds / 86400)}d ago`;
 }
 
-export default function Notifications() {
+export default function ReceptionNotifications() {
   const queryClient = useQueryClient();
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [form, setForm] = useState({
-    target_role: "reception",
     type: "system",
     title: "",
     message: "",
@@ -44,8 +38,8 @@ export default function Notifications() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-notifications", { showUnreadOnly }],
-    queryFn: () => adminAPI.listNotifications({
+    queryKey: ["reception-notifications", { showUnreadOnly }],
+    queryFn: () => receptionistAPI.listNotifications({
       unreadOnly: showUnreadOnly ? "true" : undefined,
       limit: 100,
     }),
@@ -55,12 +49,11 @@ export default function Notifications() {
   const unreadCount = notifications.filter((item) => !item.is_read).length;
 
   const createMutation = useMutation({
-    mutationFn: adminAPI.sendNotification,
+    mutationFn: receptionistAPI.sendNotificationToCustomer,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
-      toast.success("Notification sent successfully");
+      queryClient.invalidateQueries({ queryKey: ["reception-notifications"] });
+      toast.success("Notification sent to customer successfully");
       setForm({
-        target_role: "reception",
         type: "system",
         title: "",
         message: "",
@@ -73,19 +66,19 @@ export default function Notifications() {
   });
 
   const markReadMutation = useMutation({
-    mutationFn: adminAPI.markNotificationRead,
+    mutationFn: receptionistAPI.markNotificationRead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["reception-notifications"] });
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || "Failed to mark notification read");
+      toast.error(error.response?.data?.error || "Failed to mark notification as read");
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: adminAPI.deleteNotification,
+    mutationFn: receptionistAPI.deleteNotification,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["reception-notifications"] });
       toast.success("Notification deleted");
     },
     onError: (error) => {
@@ -96,10 +89,6 @@ export default function Notifications() {
   const handleSend = (event) => {
     event.preventDefault();
 
-    if (!form.target_role) {
-      toast.error("Target role is required");
-      return;
-    }
     if (!form.type) {
       toast.error("Notification type is required");
       return;
@@ -114,7 +103,7 @@ export default function Notifications() {
     }
 
     const payload = {
-      target_role: form.target_role,
+      target_role: "customer",
       type: form.type,
       title: form.title.trim(),
       message: form.message.trim(),
@@ -131,18 +120,13 @@ export default function Notifications() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Notifications"
-        title="Operational alerts and reminders"
-        description="Broadcast updates, send targeted notices, and track unread alerts."
+        title="Customer communication desk"
+        description="Review incoming reception alerts and send updates directly to customers."
       />
 
       <form className="section-card p-6 space-y-4" onSubmit={handleSend}>
         <div className="grid gap-4 md:grid-cols-2">
-          <SelectField
-            label="Target Role"
-            value={form.target_role}
-            onChange={(event) => setForm((current) => ({ ...current, target_role: event.target.value }))}
-            options={targetRoleOptions}
-          />
+          <InputField label="Target Role" value="Customer" readOnly />
           <SelectField
             label="Type"
             value={form.type}
@@ -159,11 +143,11 @@ export default function Notifications() {
             required
           />
           <InputField
-            label="Target ID (optional)"
+            label="Customer ID (optional)"
             type="number"
             value={form.target_id}
             onChange={(event) => setForm((current) => ({ ...current, target_id: event.target.value }))}
-            placeholder="e.g. customer id"
+            placeholder="Send to one customer only"
           />
         </div>
 
@@ -188,10 +172,7 @@ export default function Notifications() {
         <p className="text-sm font-semibold">
           Notifications ({notifications.length}) • Unread ({unreadCount})
         </p>
-        <Button
-          variant="outline"
-          onClick={() => setShowUnreadOnly((current) => !current)}
-        >
+        <Button variant="outline" onClick={() => setShowUnreadOnly((current) => !current)}>
           {showUnreadOnly ? "Show All" : "Show Unread Only"}
         </Button>
       </div>

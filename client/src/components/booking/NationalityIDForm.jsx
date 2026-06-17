@@ -19,7 +19,7 @@ export default function NationalityIDForm({ form, setForm }) {
           ]}
         />
         <InputField label="ID Number" value={form.id_number || ""} onChange={(event) => setForm({ ...form, id_number: event.target.value })} />
-        <InputField label="ID Expiry Date" type="date" value={form.id_expiry || ""} onChange={(event) => setForm({ ...form, id_expiry: event.target.value })} />
+        <InputField label="ID Expiry Date (Optional)" type="date" value={form.id_expiry || ""} onChange={(event) => setForm({ ...form, id_expiry: event.target.value })} />
       </div>
       <FileUpload label="Upload Document" onChange={(event) => setForm({ ...form, id_doc: event.target.files?.[0]?.name })} />
       <div className="rounded-[24px] bg-terracotta/10 p-4 text-sm text-mutedText">
