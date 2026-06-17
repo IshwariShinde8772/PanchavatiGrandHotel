@@ -37,22 +37,33 @@ async function sendOtpCode(req, res) {
     return res.status(400).json({ success: false, error: "Phone number is required" });
   }
 
-  const otp = generateOtp();
-  const hashedOtp = await hashOtp(otp);
-  const expiry = new Date(Date.now() + 10 * 60 * 1000);
-
-  const [customer] = await Customer.findOrCreate({
-    where: { phone },
-    defaults: {
-      full_name: full_name || "Guest",
+  // Check if customer is registered (must exist before sending OTP)
+  const customer = await Customer.findOne({
+    where: {
       phone,
+      is_deleted: false,
     },
   });
 
-  // If full_name provided and is not current value, update it (for signup flow)
-  if (full_name && customer.full_name === "Guest") {
-    await customer.update({ full_name });
+  if (!customer) {
+    return res.status(400).json({
+      success: false,
+      error: "Mobile number not registered. Please register first.",
+    });
   }
+
+  // Block rapid OTP resend if OTP already pending (not expired)
+  if (customer.otp_expires_at && new Date(customer.otp_expires_at) > new Date()) {
+    const timeLeft = Math.ceil((new Date(customer.otp_expires_at) - new Date()) / 1000);
+    return res.status(429).json({
+      success: false,
+      error: `Please wait ${timeLeft} seconds before requesting a new OTP.`,
+    });
+  }
+
+  const otp = generateOtp();
+  const hashedOtp = await hashOtp(otp);
+  const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
   await customer.update({
     otp_code: hashedOtp,
