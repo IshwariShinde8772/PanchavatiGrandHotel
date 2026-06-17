@@ -1,8 +1,28 @@
-const { Enquiry } = require("../../../models");
+const { Enquiry, Notification } = require("../../../models");
 const { sendEmail } = require("../../services/emailService");
 
 async function createEnquiry(req, res) {
   const enquiry = await Enquiry.create(req.body);
+
+  // Send notification to admin and receptionist about new enquiry
+  await Notification.create({
+    target_role: "reception",
+    target_id: null,
+    title: "New Enquiry Received",
+    message: `New enquiry from ${enquiry.full_name} (${enquiry.phone || enquiry.email || "No contact info"})`,
+    type: "enquiry",
+    is_read: false,
+  });
+
+  await Notification.create({
+    target_role: "receptionist",
+    target_id: null,
+    title: "New Enquiry Received",
+    message: `New enquiry from ${enquiry.full_name} (${enquiry.phone || enquiry.email || "No contact info"})`,
+    type: "enquiry",
+    is_read: false,
+  });
+
   return res.status(201).json({
     success: true,
     data: enquiry,
@@ -34,6 +54,18 @@ async function respondToEnquiry(req, res) {
     is_responded: true,
     response_text: req.body.response_text,
     responded_by_staff_id: req.user.id,
+  });
+
+  // Send notification to customer about enquiry response
+  // Note: Since enquiries can be created by non-registered customers, we use target_role: "all"
+  // to ensure the notification is visible if the customer later registers
+  await Notification.create({
+    target_role: "all",
+    target_id: null,
+    title: "Response to Your Enquiry",
+    message: `Your enquiry has been responded to. ${req.body.response_text ? "Check your email for details." : ""}`,
+    type: "enquiry",
+    is_read: false,
   });
 
   if (enquiry.email) {

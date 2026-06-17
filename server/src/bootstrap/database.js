@@ -69,6 +69,18 @@ async function ensureResetPasswordColumns() {
   }
 }
 
+async function ensurePaymentTransactionColumns() {
+  const queryInterface = sequelize.getQueryInterface();
+  const tableMeta = await queryInterface.describeTable("payment_transactions");
+
+  if (!tableMeta.razorpay_qr_id) {
+    await queryInterface.addColumn("payment_transactions", "razorpay_qr_id", {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    });
+  }
+}
+
 async function ensureBaseRecords() {
   await HotelSetting.findOrCreate({
     where: { id: 1 },
@@ -105,6 +117,7 @@ async function syncDatabase(options = {}) {
   try {
     await sequelize.sync(syncOptions);
     await ensureResetPasswordColumns();
+    await ensurePaymentTransactionColumns();
   } finally {
     if (shouldDisableForeignKeys) {
       await sequelize.query("SET FOREIGN_KEY_CHECKS = 1");

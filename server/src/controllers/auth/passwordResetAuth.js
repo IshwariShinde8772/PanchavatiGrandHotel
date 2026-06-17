@@ -6,78 +6,24 @@ const { Admin, Customer, Staff } = require("../../../models");
 const { sendEmail, hasUsableSmtpConfig } = require("../../services/emailService");
 
 const RESET_WINDOW_MINUTES = 15;
-const GENERIC_FORGOT_RESPONSE = "If an account exists, reset instructions have been sent.";
-const STAFF_ROLES = new Set(["receptionist", "manager", "housekeeping", "kitchen", "server"]);
+const FORGOT_SUCCESS_RESPONSE = "Password reset link sent to your email.";
+const UNKNOWN_EMAIL_RESPONSE = "No account found with this email address.";
 const RESETTABLE_MODELS = [
   { type: "admin", model: Admin, whereBase: {} },
   { type: "staff", model: Staff, whereBase: { is_active: true } },
   { type: "customer", model: Customer, whereBase: { is_deleted: false } },
 ];
 
-function normalizeIdentifier(value) {
+function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function normalizeRoleHint(value) {
-  const role = String(value || "").trim().toLowerCase();
-
-  if (!role) {
-    return null;
-  }
-
-  if (role === "admin" || role === "customer") {
-    return { type: role };
-  }
-
-  if (role === "staff") {
-    return { type: "staff" };
-  }
-
-  if (STAFF_ROLES.has(role)) {
-    return { type: "staff", staffRole: role };
-  }
-
-  return null;
-}
-
-function buildIdentifierWhere(identifier) {
-  const conditions = [{ email: identifier }];
-  const looksLikePhone = /^[+\d][\d\s-]{6,}$/.test(identifier);
-  const looksLikeUsername = /^[a-z0-9._-]+$/i.test(identifier);
-
-  if (!identifier.includes("@") && looksLikeUsername) {
-    // Username fallback for systems that use the email local-part as username.
-    conditions.push({ email: { [Op.like]: `${identifier}@%` } });
-  }
-
-  if (looksLikePhone) {
-    conditions.push({ phone: identifier.replace(/\s+/g, "") });
-  }
-
-  return conditions;
-}
-
-function selectResettableModels(roleHint) {
-  if (!roleHint) {
-    return RESETTABLE_MODELS;
-  }
-
-  return RESETTABLE_MODELS.filter((entry) => entry.type === roleHint.type);
-}
-
-async function findAccountByIdentifier(identifier, roleHint) {
-  const candidates = selectResettableModels(roleHint);
-  const identifierWhere = buildIdentifierWhere(identifier);
-
-  for (const candidate of candidates) {
+async function findAccountByEmail(email) {
+  for (const candidate of RESETTABLE_MODELS) {
     const where = {
       ...candidate.whereBase,
-      [Op.or]: identifierWhere,
+      email,
     };
-
-    if (candidate.type === "staff" && roleHint?.staffRole) {
-      where.role = roleHint.staffRole;
-    }
 
     const record = await candidate.model.findOne({ where });
     if (record) {
@@ -142,30 +88,34 @@ async function dispatchResetEmail(account, resetUrl) {
 }
 
 async function forgotPassword(req, res) {
-  const identifier = normalizeIdentifier(req.body.identifier);
-  const roleHint = normalizeRoleHint(req.body.role);
+  const email = normalizeEmail(req.body.email);
 
-  if (!identifier) {
-    return res.status(200).json({
-      success: true,
-      message: GENERIC_FORGOT_RESPONSE,
+  if (!email) {
+    return res.status(400).json({
+      success: false,
+      error: "Email address is required",
     });
   }
 
-  const match = await findAccountByIdentifier(identifier, roleHint);
+  const match = await findAccountByEmail(email);
 
-  if (match?.record?.email) {
-    const { token, hashedToken, expiresAt } = createResetToken();
-    await match.record.update({
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: expiresAt,
+  if (!match?.record?.email) {
+    return res.status(404).json({
+      success: false,
+      error: UNKNOWN_EMAIL_RESPONSE,
     });
-    await dispatchResetEmail(match.record, buildResetUrl(token));
   }
+
+  const { token, hashedToken, expiresAt } = createResetToken();
+  await match.record.update({
+    resetPasswordToken: hashedToken,
+    resetPasswordExpires: expiresAt,
+  });
+  await dispatchResetEmail(match.record, buildResetUrl(token));
 
   return res.status(200).json({
     success: true,
-    message: GENERIC_FORGOT_RESPONSE,
+    message: FORGOT_SUCCESS_RESPONSE,
   });
 }
 

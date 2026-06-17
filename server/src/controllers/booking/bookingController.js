@@ -49,6 +49,81 @@ function ensureBookingDates(checkIn, checkOut) {
   return { nights };
 }
 
+function ensurePositiveAmount(amount, message = "Total booking amount is invalid") {
+  const parsed = Number(amount);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    const error = new Error(message);
+    error.status = 400;
+    throw error;
+  }
+
+  return parsed;
+}
+
+function normalizeOptionalText(value) {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const normalized = String(value).trim();
+  return normalized || null;
+}
+
+async function resolveSafeCustomerUpdates({ customer, guest, transaction }) {
+  const updates = {
+    full_name: normalizeOptionalText(guest?.full_name) || customer.full_name,
+    nationality: normalizeOptionalText(guest?.nationality) || customer.nationality,
+    id_type: guest?.id_type || customer.id_type,
+    id_number: normalizeOptionalText(guest?.id_number) || customer.id_number,
+    id_expiry: normalizeOptionalText(guest?.id_expiry) || customer.id_expiry,
+    id_doc_url: normalizeOptionalText(guest?.id_doc_url) || customer.id_doc_url,
+  };
+
+  const requestedEmail = normalizeOptionalText(guest?.email);
+  if (requestedEmail && requestedEmail !== customer.email) {
+    const emailConflict = await Customer.findOne({
+      where: {
+        id: { [Op.ne]: customer.id },
+        email: requestedEmail,
+      },
+      transaction,
+    });
+
+    if (!emailConflict) {
+      updates.email = requestedEmail;
+    } else {
+      console.warn("Skipped customer email update due to unique conflict", {
+        customerId: customer.id,
+        email: requestedEmail,
+        conflictingCustomerId: emailConflict.id,
+      });
+    }
+  }
+
+  const requestedPhone = normalizeOptionalText(guest?.phone);
+  if (requestedPhone && requestedPhone !== customer.phone) {
+    const phoneConflict = await Customer.findOne({
+      where: {
+        id: { [Op.ne]: customer.id },
+        phone: requestedPhone,
+      },
+      transaction,
+    });
+
+    if (!phoneConflict) {
+      updates.phone = requestedPhone;
+    } else {
+      console.warn("Skipped customer phone update due to unique conflict", {
+        customerId: customer.id,
+        phone: requestedPhone,
+        conflictingCustomerId: phoneConflict.id,
+      });
+    }
+  }
+
+  return updates;
+}
+
 async function prepareBookingData({ roomId, checkIn, checkOut, guests, transaction, lockRows = false }) {
   const room = await Room.findByPk(roomId, {
     transaction,
@@ -102,17 +177,18 @@ async function createBooking(req, res) {
   try {
     const { room_id, check_in, check_out, guests, special_requests, payment_method, guest } = req.body;
     const customer = await Customer.findByPk(req.user.id, { transaction });
+    if (!customer) {
+      const error = new Error("Customer account not found");
+      error.status = 404;
+      throw error;
+    }
 
-    await customer.update({
-      full_name: guest.full_name || customer.full_name,
-      email: guest.email || customer.email,
-      phone: guest.phone || customer.phone,
-      nationality: guest.nationality || customer.nationality,
-      id_type: guest.id_type || customer.id_type,
-      id_number: guest.id_number || customer.id_number,
-      id_expiry: guest.id_expiry || customer.id_expiry,
-      id_doc_url: guest.id_doc_url || customer.id_doc_url,
-    }, { transaction });
+    const customerUpdates = await resolveSafeCustomerUpdates({
+      customer,
+      guest,
+      transaction,
+    });
+    await customer.update(customerUpdates, { transaction });
 
     const prepared = await prepareBookingData({
       roomId: room_id,
@@ -125,9 +201,22 @@ async function createBooking(req, res) {
 
     const isPayLater = payment_method === "pay_later";
     const isQrPayment = payment_method === "qr";
+    const totalAmount = ensurePositiveAmount(
+      prepared.gst.totalAmount,
+      "Unable to create booking because the total amount is invalid"
+    );
+
+    if (isQrPayment && (!env.razorpay.keyId || !env.razorpay.keySecret)) {
+      const configError = new Error(
+        "Razorpay QR payment is not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET."
+      );
+      configError.status = 400;
+      throw configError;
+    }
+
     const order = !isPayLater && !isQrPayment
       ? await createOrder({
-          amount: Math.round(prepared.gst.totalAmount * 100),
+          amount: Math.round(totalAmount * 100),
           currency: "INR",
           receipt: `room_${room_id}_${Date.now()}`,
         })
@@ -144,7 +233,7 @@ async function createBooking(req, res) {
       total_fare: prepared.fare,
       gst_percent: prepared.gst.gstPercent,
       gst_amount: prepared.gst.gstAmount,
-      total_amount: prepared.gst.totalAmount,
+      total_amount: totalAmount,
       special_requests,
       payment_method,
       razorpay_order_id: order?.id || null,
@@ -201,6 +290,27 @@ async function createBooking(req, res) {
     });
   } catch (error) {
     await transaction.rollback();
+    console.error("createBooking failed", {
+      customerId: req.user?.id || null,
+      roomId: req.body?.room_id || null,
+      paymentMethod: req.body?.payment_method || null,
+      checkIn: req.body?.check_in || null,
+      checkOut: req.body?.check_out || null,
+      error: {
+        name: error?.name || null,
+        status: error?.status || null,
+        message: error?.message || "Unknown booking creation error",
+        details: error?.details || null,
+        validationErrors: Array.isArray(error?.errors)
+          ? error.errors.map((item) => ({
+              message: item.message,
+              path: item.path,
+              value: item.value,
+              type: item.type,
+            }))
+          : null,
+      },
+    });
     throw error;
   }
 }
@@ -828,9 +938,10 @@ async function extendBooking(req, res) {
       return res.status(400).json({ success: false, error: "Booking room information not available" });
     }
 
-    // Check if booking can be extended
-    if (!["confirmed", "checked_in"].includes(booking.status)) {
-      return res.status(400).json({ success: false, error: `Cannot extend booking with status: ${booking.status}` });
+    // Extension is allowed only after the guest has checked in.
+    if (booking.status !== "checked_in") {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: "Only checked-in bookings can be extended." });
     }
 
     if (!booking.fare_per_night || booking.gst_percent === null || booking.gst_percent === undefined) {
@@ -948,6 +1059,122 @@ async function extendBooking(req, res) {
   }
 }
 
+async function postponeBookingCheckIn(req, res) {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const booking = await Booking.findByPk(req.params.id, {
+      include: [
+        { model: Customer, as: "customer" },
+        { model: Room, as: "room" },
+      ],
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!booking) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: "Booking not found" });
+    }
+
+    if (booking.status === "checked_in") {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Checked-in bookings cannot be postponed.",
+      });
+    }
+
+    if (!["pending", "confirmed"].includes(booking.status)) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Cannot postpone check-in for booking with status: ${booking.status}`,
+      });
+    }
+
+    const currentCheckIn = parseDateInput(booking.check_in);
+    const currentCheckOut = parseDateInput(booking.check_out);
+    const requestedCheckIn = parseDateInput(req.body.check_in);
+    const today = startOfTodayUTC();
+
+    if (!requestedCheckIn || !currentCheckIn || !currentCheckOut) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: "Invalid booking dates" });
+    }
+
+    if (requestedCheckIn < today) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: "Check-in cannot be in the past" });
+    }
+
+    if (requestedCheckIn <= currentCheckIn) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "New check-in date must be after the current check-in date",
+      });
+    }
+
+    const nights = Number(booking.nights) || diffNights(booking.check_in, booking.check_out);
+    if (!Number.isFinite(nights) || nights < 1) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: "Booking nights are invalid" });
+    }
+
+    const requestedCheckOut = new Date(requestedCheckIn.getTime() + nights * 24 * 60 * 60 * 1000);
+    const requestedCheckInStr = requestedCheckIn.toISOString().slice(0, 10);
+    const requestedCheckOutStr = requestedCheckOut.toISOString().slice(0, 10);
+
+    const overlapCount = await countOverlappingBookings({
+      roomId: booking.room_id,
+      checkIn: requestedCheckInStr,
+      checkOut: requestedCheckOutStr,
+      excludeBookingId: booking.id,
+      transaction,
+    });
+
+    if (overlapCount >= Number(booking.room.total_units || 1)) {
+      await transaction.rollback();
+      return res.status(409).json({
+        success: false,
+        error: "The room is not available for the postponed stay window",
+      });
+    }
+
+    await booking.update({
+      check_in: requestedCheckInStr,
+      check_out: requestedCheckOutStr,
+    }, { transaction });
+
+    await Notification.create({
+      target_role: "customer",
+      target_id: booking.customer_id,
+      title: "Check-in postponed",
+      message: `Your booking ${booking.booking_ref} check-in has been postponed to ${requestedCheckInStr}.`,
+      type: "booking",
+    }, { transaction });
+
+    await transaction.commit();
+
+    const refreshed = await Booking.findByPk(booking.id, {
+      include: [
+        { model: Customer, as: "customer" },
+        { model: Room, as: "room" },
+      ],
+    });
+
+    return res.json({
+      success: true,
+      data: refreshed,
+      message: "Check-in postponed successfully",
+    });
+  } catch (error) {
+    await transaction.rollback();
+    throw error;
+  }
+}
+
 module.exports = {
   createBooking,
   verifyBookingPayment,
@@ -959,6 +1186,7 @@ module.exports = {
   checkInBooking,
   checkOutBooking,
   extendBooking,
+  postponeBookingCheckIn,
   updateBooking,
   deleteBooking,
 };

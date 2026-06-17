@@ -5,7 +5,9 @@ const {
   checkInSchema,
   checkOutSchema,
   extendBookingSchema,
+  postponeCheckInSchema,
   cancelBookingSchema,
+  processExtensionRequestSchema,
 } = require("../validators/bookingValidator");
 const { generateBillSchema } = require("../validators/billValidator");
 const { getReceptionistDashboard } = require("../controllers/dashboard/receptionistDashboard");
@@ -15,6 +17,7 @@ const {
   checkInBooking,
   checkOutBooking,
   extendBooking,
+  postponeBookingCheckIn,
   cancelBooking,
 } = require("../controllers/booking/bookingController");
 const { getRoomGrid } = require("../controllers/room/roomController");
@@ -24,22 +27,15 @@ const {
   createMaintenanceLog,
 } = require("../controllers/maintenance/maintenanceController");
 const {
-  assignReceptionTask,
-  createReceptionTask,
-  listAssignableStaff,
-  listReceptionTasks,
-  updateReceptionTaskStatus,
-} = require("../controllers/task/taskController");
-const {
   listBookingExtensionRequests,
   processBookingExtensionRequest,
 } = require("../controllers/booking/extensionController");
-const { processExtensionRequestSchema } = require("../validators/bookingValidator");
 const {
-  assignTaskSchema,
-  createTaskSchema,
-  updateTaskStatusSchema,
-} = require("../validators/taskValidator");
+  listReceptionNotifications,
+  createReceptionNotification,
+  markReceptionNotificationRead,
+  deleteReceptionNotification,
+} = require("../controllers/notification/notificationController");
 
 const {
   listEnquiries,
@@ -54,16 +50,16 @@ router.post("/walk-in-bookings", validate(walkInBookingSchema), createWalkInBook
 router.post("/bookings/:id/check-in", validate(checkInSchema), checkInBooking);
 router.post("/bookings/:id/check-out", validate(checkOutSchema), checkOutBooking);
 router.post("/bookings/:id/extend", validate(extendBookingSchema), extendBooking);
+router.post("/bookings/:id/postpone", validate(postponeCheckInSchema), postponeBookingCheckIn);
 router.post("/bookings/:id/cancel", validate(cancelBookingSchema), cancelBooking);
 router.get("/room-grid", getRoomGrid);
 router.post("/bills/generate", validate(generateBillSchema), generateBookingBill);
 router.get("/maintenance", listMaintenance);
 router.post("/maintenance", createMaintenanceLog);
-router.get("/staff", listAssignableStaff);
-router.get("/tasks", listReceptionTasks);
-router.post("/tasks", validate(createTaskSchema), createReceptionTask);
-router.patch("/tasks/:id/assign", validate(assignTaskSchema), assignReceptionTask);
-router.patch("/tasks/:id/status", validate(updateTaskStatusSchema), updateReceptionTaskStatus);
+router.get("/notifications", listReceptionNotifications);
+router.post("/notifications", createReceptionNotification);
+router.patch("/notifications/:id/read", markReceptionNotificationRead);
+router.delete("/notifications/:id", deleteReceptionNotification);
 router.get("/enquiries", listEnquiries);
 router.patch("/enquiries/:id/respond", respondToEnquiry);
 router.get("/extensions", listBookingExtensionRequests);

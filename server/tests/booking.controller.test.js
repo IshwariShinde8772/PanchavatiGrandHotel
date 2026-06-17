@@ -69,6 +69,8 @@ const {
   cancelBooking,
   checkInBooking,
   checkOutBooking,
+  extendBooking,
+  postponeBookingCheckIn,
 } = require("../src/controllers/booking/bookingController");
 
 function createRes() {
@@ -417,5 +419,75 @@ describe("Booking controller hardening and lifecycle", () => {
       error: expect.stringContaining("Checked-in bookings cannot be cancelled"),
     }));
     expect(transaction.rollback).toHaveBeenCalled();
+  });
+
+  it("rejects extend booking when booking is not checked in", async () => {
+    const transaction = {
+      commit: jest.fn(),
+      rollback: jest.fn(),
+    };
+    sequelize.transaction.mockResolvedValue(transaction);
+
+    const booking = {
+      id: 77,
+      status: "confirmed",
+      room: { id: 10 },
+    };
+    Booking.findByPk.mockResolvedValue(booking);
+
+    const req = {
+      params: { id: "77" },
+      body: {
+        check_out: "2026-07-10",
+        reason: "Guest requested extension",
+        payment_method: "cash",
+      },
+    };
+    const res = createRes();
+
+    await extendBooking(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      error: "Only checked-in bookings can be extended.",
+    }));
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
+  });
+
+  it("rejects postponing booking when booking is already checked in", async () => {
+    const transaction = {
+      LOCK: { UPDATE: "UPDATE" },
+      commit: jest.fn(),
+      rollback: jest.fn(),
+    };
+    sequelize.transaction.mockResolvedValue(transaction);
+
+    const booking = {
+      id: 88,
+      status: "checked_in",
+      room: { total_units: 1 },
+    };
+    Booking.findByPk.mockResolvedValue(booking);
+
+    const req = {
+      params: { id: "88" },
+      body: {
+        check_in: "2026-07-11",
+        reason: "Guest requested new arrival date",
+      },
+    };
+    const res = createRes();
+
+    await postponeBookingCheckIn(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: false,
+      error: "Checked-in bookings cannot be postponed.",
+    }));
+    expect(transaction.rollback).toHaveBeenCalled();
+    expect(transaction.commit).not.toHaveBeenCalled();
   });
 });

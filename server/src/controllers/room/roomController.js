@@ -1,6 +1,6 @@
 const { Op } = require("sequelize");
-const { Room, Feedback, HotelSetting, Booking, Offer } = require("../../../models");
-const { listRoomsWithAvailability, calculateEffectivePrice, getAvailabilityForRoom, normalizeRoomRecord } = require("../../services/roomService");
+const { Room, Feedback, HotelSetting, Booking } = require("../../../models");
+const { listRoomsWithAvailability, calculateEffectivePrice, getAvailabilityForRoom, listActiveOffers, normalizeRoomRecord } = require("../../services/roomService");
 const { getPagination } = require("../../utils/pagination");
 
 function normalizeStringArray(value) {
@@ -101,7 +101,9 @@ async function getRoomDetail(req, res) {
     attributes: ["check_in", "check_out"]
   });
 
-  const pricing = calculateEffectivePrice(room, req.query.checkIn);
+  const effectiveDate = req.query.checkIn || new Date().toISOString().slice(0, 10);
+  const activeOffers = await listActiveOffers(effectiveDate);
+  const pricing = calculateEffectivePrice(room, req.query.checkIn, activeOffers);
   const reviews = await Feedback.findAll({
     where: {
       room_category: room.category,
@@ -137,14 +139,7 @@ async function getHomeCatalogue(req, res) {
       order: [["created_at", "DESC"]],
       limit: 6,
     }),
-    Offer.findAll({
-      where: {
-        is_active: true,
-        end_date: { [Op.gte]: today },
-      },
-      order: [["end_date", "ASC"]],
-      limit: 6,
-    }),
+    listActiveOffers(today).then((activeOffers) => activeOffers.slice(0, 6)),
   ]);
 
   return res.json({

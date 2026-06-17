@@ -33,20 +33,20 @@ describe("Password reset auth controller", () => {
     jest.clearAllMocks();
   });
 
-  it("returns generic forgot password response when account is not found", async () => {
+  it("rejects forgot password when email is not found and does not send a link", async () => {
     Admin.findOne.mockResolvedValue(null);
     Staff.findOne.mockResolvedValue(null);
     Customer.findOne.mockResolvedValue(null);
 
-    const req = { body: { identifier: "unknown@example.com" } };
+    const req = { body: { email: "unknown@example.com" } };
     const res = createRes();
 
     await forgotPassword(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      message: "If an account exists, reset instructions have been sent.",
+      success: false,
+      error: "No account found with this email address.",
     });
     expect(sendEmail).not.toHaveBeenCalled();
   });
@@ -63,7 +63,10 @@ describe("Password reset auth controller", () => {
     hasUsableSmtpConfig.mockReturnValue(false);
 
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
-    const req = { body: { identifier: "admin@example.com", role: "admin" } };
+    Staff.findOne.mockResolvedValue(null);
+    Customer.findOne.mockResolvedValue(null);
+
+    const req = { body: { email: "admin@example.com" } };
     const res = createRes();
 
     await forgotPassword(req, res);
@@ -76,6 +79,11 @@ describe("Password reset auth controller", () => {
     );
     expect(sendEmail).not.toHaveBeenCalled();
     expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("/reset-password?token="));
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: "Password reset link sent to your email.",
+    });
 
     logSpy.mockRestore();
   });

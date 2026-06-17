@@ -412,6 +412,7 @@ async function getNotifications(req, res) {
     where: {
       [Op.or]: [
         { target_role: "customer", target_id: req.user.id },
+        { target_role: "customer", target_id: null },
         { target_role: "all" },
       ],
     },
@@ -434,6 +435,7 @@ async function markNotificationsRead(req, res) {
       where: {
         [Op.or]: [
           { target_role: "customer", target_id: req.user.id },
+          { target_role: "customer", target_id: null },
           { target_role: "all" },
         ],
       },
@@ -452,6 +454,7 @@ async function deleteNotification(req, res) {
       id: req.params.id,
       [Op.or]: [
         { target_role: "customer", target_id: req.user.id },
+        { target_role: "customer", target_id: null },
         { target_role: "all" },
       ],
     },
@@ -469,6 +472,7 @@ async function clearNotifications(req, res) {
     where: {
       [Op.or]: [
         { target_role: "customer", target_id: req.user.id },
+        { target_role: "customer", target_id: null },
         { target_role: "all" },
       ],
     },

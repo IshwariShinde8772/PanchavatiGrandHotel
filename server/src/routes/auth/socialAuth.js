@@ -9,6 +9,7 @@ const { Customer } = require("../../../models");
 const router = express.Router();
 const OAUTH_EXCHANGE_COOKIE = "oauth_exchange_token";
 const OAUTH_EXCHANGE_MAX_AGE_MS = 5 * 60 * 1000;
+const isGoogleConfigured = Boolean(env.google.clientId && env.google.clientSecret);
 
 function parseCookies(header = "") {
   return header
@@ -45,25 +46,41 @@ function clearOauthCookie(res) {
   });
 }
 
-// Google OAuth routes
-router.get("/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
-);
-
-router.get("/google/callback",
-  passport.authenticate("google", { failureRedirect: `${env.clientUrl}/login?error=oauth_failed` }),
-  (req, res) => {
-    const token = signToken({
-      id: req.user.id,
-      role: "customer",
-      phone: req.user.phone,
-      name: req.user.full_name,
-    }, "5m");
-
-    res.cookie(OAUTH_EXCHANGE_COOKIE, token, getCookieOptions());
-    res.redirect(`${env.clientUrl}/auth/callback?provider=google`);
+function redirectGoogleNotConfigured(res) {
+  if (env.clientUrl) {
+    return res.redirect(`${env.clientUrl}/login?error=google_not_configured`);
   }
-);
+
+  return res.status(503).json({
+    success: false,
+    error: "Google login is not configured on the server",
+  });
+}
+
+// Google OAuth routes
+if (isGoogleConfigured) {
+  router.get("/google",
+    passport.authenticate("google", { scope: ["profile", "email"] })
+  );
+
+  router.get("/google/callback",
+    passport.authenticate("google", { failureRedirect: `${env.clientUrl}/login?error=oauth_failed` }),
+    (req, res) => {
+      const token = signToken({
+        id: req.user.id,
+        role: "customer",
+        phone: req.user.phone,
+        name: req.user.full_name,
+      }, "5m");
+
+      res.cookie(OAUTH_EXCHANGE_COOKIE, token, getCookieOptions());
+      res.redirect(`${env.clientUrl}/auth/callback?provider=google`);
+    }
+  );
+} else {
+  router.get("/google", (req, res) => redirectGoogleNotConfigured(res));
+  router.get("/google/callback", (req, res) => redirectGoogleNotConfigured(res));
+}
 
 router.get("/oauth/exchange", async (req, res) => {
   const cookies = parseCookies(req.headers.cookie || "");
@@ -107,4 +124,3 @@ router.get("/oauth/exchange", async (req, res) => {
 });
 
 module.exports = router;
-

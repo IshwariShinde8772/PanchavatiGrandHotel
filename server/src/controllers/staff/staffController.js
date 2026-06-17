@@ -5,6 +5,19 @@ const { sanitizeUser } = require("../../utils/serializers");
 const { sendEmail } = require("../../services/emailService");
 const { generateStaffPassword, validatePassword } = require("../../utils/passwordGenerator");
 
+function normalizeStaffRole(value) {
+  const role = String(value || "").trim().toLowerCase();
+  if (!role) {
+    return undefined;
+  }
+
+  if (role === "reception" || role === "receptionist") {
+    return "receptionist";
+  }
+
+  return role;
+}
+
 function normalizeStaffPayload(payload = {}) {
   const normalized = {
     ...payload,
@@ -22,6 +35,10 @@ function normalizeStaffPayload(payload = {}) {
     normalized.phone = normalized.phone.trim();
   }
 
+  if (normalized.role !== undefined) {
+    normalized.role = normalizeStaffRole(normalized.role);
+  }
+
   if (normalized.schedule && normalized.schedule_json === undefined) {
     normalized.schedule_json = normalized.schedule;
   }
@@ -32,7 +49,8 @@ function normalizeStaffPayload(payload = {}) {
 }
 
 async function listStaff(req, res) {
-  const where = req.query.role ? { role: req.query.role } : undefined;
+  const queryRole = normalizeStaffRole(req.query.role);
+  const where = queryRole ? { role: queryRole } : undefined;
   const staff = await Staff.findAll({
     where,
     order: [["created_at", "DESC"]],
@@ -50,6 +68,13 @@ async function listStaff(req, res) {
 
 async function createStaff(req, res) {
   const payload = normalizeStaffPayload(req.body);
+  if (payload.role !== "receptionist") {
+    return res.status(400).json({
+      success: false,
+      error: "Only reception staff can be created from this form",
+    });
+  }
+
   const existing = await Staff.findOne({
     where: {
       [Op.or]: [
@@ -118,6 +143,10 @@ async function updateStaff(req, res) {
   }
 
   const updates = normalizeStaffPayload(req.body);
+  if (updates.role !== undefined) {
+    delete updates.role;
+  }
+
   if (updates.email || updates.phone) {
     const conflict = await Staff.findOne({
       where: {

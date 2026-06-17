@@ -74,16 +74,8 @@ const passwordStrengthSchema = requiredTrimmed(
     )
 );
 
-const resetRoleSchema = optionalTrimmed(
-  z.enum(["admin", "customer", "staff", "receptionist", "manager", "housekeeping", "kitchen", "server"])
-);
-
 const forgotPasswordSchema = z.object({
-  identifier: requiredTrimmed(z.string().min(2).max(120)),
-  role: z.preprocess(
-    (value) => (typeof value === "string" ? value.trim().toLowerCase() : value),
-    resetRoleSchema
-  ),
+  email: requiredTrimmed(z.string().email("Enter a valid email address").max(120)),
 });
 
 const resetPasswordSchema = z.object({

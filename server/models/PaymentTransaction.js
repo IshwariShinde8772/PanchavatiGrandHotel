@@ -19,6 +19,7 @@ module.exports = (sequelize) => sequelize.define(
       defaultValue: "pending",
     },
     upi_id: { type: DataTypes.STRING },
+    razorpay_qr_id: { type: DataTypes.STRING },
     qr_payload: { type: DataTypes.TEXT },
     qr_image_url: { type: DataTypes.TEXT },
     qr_expires_at: { type: DataTypes.DATE },

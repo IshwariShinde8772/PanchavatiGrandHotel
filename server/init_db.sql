@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     payment_method ENUM('qr', 'online', 'upi', 'cash', 'card', 'pay_later') DEFAULT 'qr',
     status ENUM('pending', 'paid', 'expired', 'cancelled', 'failed') DEFAULT 'pending',
     upi_id VARCHAR(255),
+    razorpay_qr_id VARCHAR(255),
     qr_payload TEXT,
     qr_image_url TEXT,
     qr_expires_at DATETIME,

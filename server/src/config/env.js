@@ -73,8 +73,8 @@ const env = {
   },
 
   razorpay: {
-    keyId: process.env.RAZORPAY_KEY_ID || "",
-    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
+    keyId: String(process.env.RAZORPAY_KEY_ID || "").trim(),
+    keySecret: String(process.env.RAZORPAY_KEY_SECRET || "").trim(),
   },
 
   smtp: {
@@ -97,7 +97,11 @@ const env = {
   },
 
   payments: {
-    qrExpiryMinutes: Number(process.env.QR_PAYMENT_EXPIRY_MINUTES || 10),
+    qrExpiryMinutes: Number(
+      process.env.QR_PAYMENT_EXPIRY_MINUTES
+      || process.env.RAZORPAY_QR_EXPIRY_MINUTES
+      || 10
+    ),
   },
 
   gstPercent: Number.isFinite(gstPercent) ? gstPercent : 0,

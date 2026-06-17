@@ -3,6 +3,13 @@ const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const env = require("./env");
 const { Customer } = require("../../models");
 
+function getOauthBackendBaseUrl() {
+  return String(env.backendUrl || "")
+    .trim()
+    .replace(/\/+$/g, "")
+    .replace(/\/api$/i, "");
+}
+
 // Serialize user for session
 passport.serializeUser((user, done) => {
   done(null, user.id);
@@ -24,7 +31,7 @@ if (env.google.clientId && env.google.clientSecret) {
       {
         clientID: env.google.clientId,
         clientSecret: env.google.clientSecret,
-        callbackURL: `${env.backendUrl}/api/auth/google/callback`,
+        callbackURL: `${getOauthBackendBaseUrl()}/api/auth/google/callback`,
       },
       async (accessToken, refreshToken, profile, done) => {
         try {

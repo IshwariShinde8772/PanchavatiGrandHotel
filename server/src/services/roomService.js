@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { Room, Booking } = require("../../models");
+const { Room, Booking, Offer } = require("../../models");
 const env = require("../config/env");
 const { isDateInRange } = require("../utils/dateHelpers");
 
@@ -67,34 +67,100 @@ function normalizeRoomRecord(room) {
   };
 }
 
-function calculateEffectivePrice(room, checkIn) {
+function normalizeOfferRecord(offer) {
+  if (!offer) {
+    return null;
+  }
+
+  const plain = typeof offer?.get === "function" ? offer.get({ plain: true }) : { ...offer };
+  return {
+    id: plain.id,
+    title: plain.title,
+    description: plain.description,
+    discount_pct: Number(plain.discount_pct),
+    start_date: plain.start_date,
+    end_date: plain.end_date,
+    room_category: plain.room_category || "All",
+  };
+}
+
+function findBestOfferForRoom(room, offers = [], effectiveDate) {
+  const roomCategory = String(room.category || "").trim();
+
+  return offers
+    .map(normalizeOfferRecord)
+    .filter(Boolean)
+    .filter((offer) => (
+      offer.discount_pct > 0
+      && (offer.room_category === "All" || offer.room_category === roomCategory)
+      && isDateInRange(effectiveDate, offer.start_date, offer.end_date)
+    ))
+    .sort((a, b) => Number(b.discount_pct) - Number(a.discount_pct))[0] || null;
+}
+
+async function listActiveOffers(effectiveDate) {
+  return Offer.findAll({
+    where: {
+      is_active: true,
+      start_date: { [Op.lte]: effectiveDate },
+      end_date: { [Op.gte]: effectiveDate },
+    },
+    order: [["discount_pct", "DESC"], ["end_date", "ASC"]],
+  });
+}
+
+function calculateEffectivePrice(room, checkIn, offers = []) {
   const basePrice = Number(room.base_price);
   const seasonalPrice = room.seasonal_price ? Number(room.seasonal_price) : null;
-  const discountPct = room.discount_pct ? Number(room.discount_pct) : null;
+  const effectiveDate = checkIn || new Date().toISOString().slice(0, 10);
+  const offer = findBestOfferForRoom(room, offers, effectiveDate);
+  const roomDiscountPct = room.discount_pct ? Number(room.discount_pct) : null;
+  const discountPct = offer?.discount_pct || roomDiscountPct;
 
-  if (checkIn && seasonalPrice && room.seasonal_start && room.seasonal_end
-    && isDateInRange(checkIn, room.seasonal_start, room.seasonal_end)) {
-    return {
-      pricePerNight: seasonalPrice,
-      priceType: "seasonal",
-      savings: 0,
-    };
-  }
+  const hasSeasonalPrice = Boolean(
+    seasonalPrice
+    && room.seasonal_start
+    && room.seasonal_end
+    && isDateInRange(effectiveDate, room.seasonal_start, room.seasonal_end)
+  );
 
-  if (checkIn && discountPct && room.discount_start && room.discount_end
-    && isDateInRange(checkIn, room.discount_start, room.discount_end)) {
-    const discountedPrice = Number((basePrice * (1 - discountPct / 100)).toFixed(2));
-    return {
-      pricePerNight: discountedPrice,
-      priceType: "discounted",
-      savings: Number((basePrice - discountedPrice).toFixed(2)),
-    };
-  }
+  const hasDiscount = Boolean(
+    discountPct
+    && (
+      offer
+      || (
+        room.discount_start
+        && room.discount_end
+        && isDateInRange(effectiveDate, room.discount_start, room.discount_end)
+      )
+    )
+  );
+
+  const discountedPrice = hasDiscount
+    ? Number((basePrice * (1 - discountPct / 100)).toFixed(2))
+    : null;
+
+  const finalPrice = hasDiscount
+    ? discountedPrice
+    : hasSeasonalPrice
+      ? seasonalPrice
+      : basePrice;
+
+  const discountAmount = hasDiscount
+    ? Number((basePrice - discountedPrice).toFixed(2))
+    : 0;
 
   return {
-    pricePerNight: basePrice,
-    priceType: "base",
-    savings: 0,
+    basePrice,
+    seasonalPrice: hasSeasonalPrice ? seasonalPrice : null,
+    pricePerNight: finalPrice,
+    finalPrice,
+    priceType: offer ? "offer" : hasDiscount ? "discounted" : hasSeasonalPrice ? "seasonal" : "base",
+    discountPct: hasDiscount ? discountPct : 0,
+    discountAmount,
+    hasDiscount,
+    offer: hasDiscount && offer ? offer : null,
+    savings: Number(Math.max(basePrice - finalPrice, 0).toFixed(2)),
   };
 }
 
@@ -146,6 +212,8 @@ async function getAvailabilityForRoom(room, checkIn, checkOut) {
 }
 
 async function listRoomsWithAvailability(filters) {
+  const effectiveDate = filters.checkIn || new Date().toISOString().slice(0, 10);
+  const activeOffers = await listActiveOffers(effectiveDate);
   const rooms = await Room.findAll({
     where: { is_active: true },
     order: [["base_price", "ASC"]],
@@ -160,7 +228,7 @@ async function listRoomsWithAvailability(filters) {
 
   const mapped = await Promise.all(
     rooms.map(async (room) => {
-      const price = calculateEffectivePrice(room, filters.checkIn);
+      const price = calculateEffectivePrice(room, filters.checkIn, activeOffers);
       const availability = await getAvailabilityForRoom(room, filters.checkIn, filters.checkOut);
       const normalizedRoom = normalizeRoomRecord(room);
 
@@ -208,7 +276,9 @@ async function listRoomsWithAvailability(filters) {
 module.exports = {
   calculateEffectivePrice,
   countOverlappingBookings,
+  findBestOfferForRoom,
   getAvailabilityForRoom,
+  listActiveOffers,
   listRoomsWithAvailability,
   normalizeRoomRecord,
 };

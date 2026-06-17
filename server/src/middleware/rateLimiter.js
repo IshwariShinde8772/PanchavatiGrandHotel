@@ -1,4 +1,5 @@
 const rateLimit = require("express-rate-limit");
+const { normalizePhoneNumber } = require("../utils/phone");
 
 const customerLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -29,10 +30,10 @@ const staffLoginLimiter = rateLimit({
 
 const otpLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.body.phone || req.ip,
+  keyGenerator: (req) => `otp_${normalizePhoneNumber(req.body.phone) || req.ip}`,
   message: { success: false, error: "Too many OTP requests. Try again in 15 minutes." },
 });
 
