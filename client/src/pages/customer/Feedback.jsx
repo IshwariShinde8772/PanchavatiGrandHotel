@@ -27,7 +27,7 @@ export default function Feedback() {
       queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || t("customer.feedbackFailed"));
+      toast.error(t("customer.feedbackFailed"));
     },
   });
 
@@ -140,7 +140,7 @@ export default function Feedback() {
               <StarRating value={ratings[booking.id] || 0} onChange={(value) => setRatings({ ...ratings, [booking.id]: value })} />
             </div>
             <textarea className="mt-4 min-h-28 w-full rounded-[24px] border border-divider px-4 py-3" placeholder="What stood out about your stay?" />
-            <Button className="mt-4">Submit Review</Button>
+            <Button className="mt-4">{t("customer.submitReview")}</Button>
           </div>
         ))}
       </div>

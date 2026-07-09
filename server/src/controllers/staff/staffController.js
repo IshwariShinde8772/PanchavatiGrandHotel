@@ -4,6 +4,7 @@ const { Staff } = require("../../../models");
 const { sanitizeUser } = require("../../utils/serializers");
 const { sendEmail } = require("../../services/emailService");
 const { generateStaffPassword, validatePassword } = require("../../utils/passwordGenerator");
+const { getPagination } = require("../../utils/pagination");
 
 function normalizeStaffRole(value) {
   const role = String(value || "").trim().toLowerCase();
@@ -13,6 +14,10 @@ function normalizeStaffRole(value) {
 
   if (role === "reception" || role === "receptionist") {
     return "receptionist";
+  }
+
+  if (role === "waiter" || role === "server") {
+    return role;
   }
 
   return role;
@@ -50,19 +55,35 @@ function normalizeStaffPayload(payload = {}) {
 
 async function listStaff(req, res) {
   const queryRole = normalizeStaffRole(req.query.role);
-  const where = queryRole ? { role: queryRole } : undefined;
-  const staff = await Staff.findAll({
+  const { page, limit, offset } = getPagination(req.query);
+  const where = queryRole ? { role: queryRole } : {};
+  if (req.query.q) {
+    const query = `%${req.query.q}%`;
+    where[Op.or] = [
+      { full_name: { [Op.like]: query } },
+      { phone: { [Op.like]: query } },
+      { email: { [Op.like]: query } },
+      { role: { [Op.like]: query } },
+    ];
+  }
+  const { count, rows } = await Staff.findAndCountAll({
     where,
     order: [["created_at", "DESC"]],
     attributes: { exclude: ["password_hash"] },
+    offset,
+    limit,
   });
 
   return res.json({
     success: true,
-    data: staff,
-    total: staff.length,
-    page: 1,
-    limit: staff.length || 10,
+    data: rows,
+    total: count,
+    page,
+    limit,
+    totalRecords: count,
+    totalPages: Math.max(Math.ceil(count / limit), 1),
+    currentPage: page,
+    pageSize: limit,
   });
 }
 
@@ -133,6 +154,78 @@ async function createStaff(req, res) {
     password: password, // Return password to admin so they can share it securely
     email_delivery: emailResult,
     message: "Staff member created successfully. Share the password with them securely.",
+  });
+}
+
+async function listReceptionistStaff(req, res) {
+  const { page, limit, offset } = getPagination(req.query);
+  const { count, rows } = await Staff.findAndCountAll({
+    where: { created_by_staff_id: req.user.id },
+    order: [["created_at", "DESC"]],
+    attributes: { exclude: ["password_hash"] },
+    offset,
+    limit,
+  });
+
+  return res.json({
+    success: true,
+    data: rows,
+    total: count,
+    page,
+    limit,
+    totalRecords: count,
+    totalPages: Math.max(Math.ceil(count / limit), 1),
+    currentPage: page,
+    pageSize: limit,
+  });
+}
+
+async function createReceptionistStaff(req, res) {
+  const payload = normalizeStaffPayload(req.body);
+  const allowedRoles = new Set(["housekeeping", "waiter", "admin_staff"]);
+  if (!allowedRoles.has(payload.role)) {
+    return res.status(400).json({
+      success: false,
+      error: "Receptionist can add housekeeping, waiter, or admin staff only",
+    });
+  }
+
+  if (!payload.id_proof_url || !payload.id_proof_public_id) {
+    return res.status(400).json({ success: false, error: "ID proof upload is required" });
+  }
+
+  if (payload.role === "admin_staff" && (!payload.specific_role || !payload.email)) {
+    return res.status(400).json({
+      success: false,
+      error: "Specific role and email are required for admin staff",
+    });
+  }
+
+  const conflictWhere = [{ phone: payload.phone }];
+  if (payload.email) {
+    conflictWhere.push({ email: payload.email });
+  }
+
+  const existing = await Staff.findOne({ where: { [Op.or]: conflictWhere } });
+  if (existing) {
+    return res.status(409).json({
+      success: false,
+      error: "A staff member already exists with this email or phone",
+    });
+  }
+
+  const password = generateStaffPassword();
+  const staff = await Staff.create({
+    ...payload,
+    password_hash: await bcrypt.hash(password, 12),
+    created_by_staff_id: req.user.id,
+    is_active: payload.is_active ?? true,
+  });
+
+  return res.status(201).json({
+    success: true,
+    data: sanitizeUser(staff),
+    message: "Staff member added successfully",
   });
 }
 
@@ -222,6 +315,13 @@ async function resetStaffPassword(req, res) {
     return res.status(404).json({ success: false, error: "Staff member not found" });
   }
 
+  if (staff.role !== "receptionist") {
+    return res.status(403).json({
+      success: false,
+      error: "Passwords can only be reset for reception profiles",
+    });
+  }
+
   const tempPassword = generateStaffPassword();
   await staff.update({
     password_hash: await bcrypt.hash(tempPassword, 12),
@@ -248,7 +348,9 @@ async function resetStaffPassword(req, res) {
 
 module.exports = {
   listStaff,
+  listReceptionistStaff,
   createStaff,
+  createReceptionistStaff,
   updateStaff,
   deleteStaff,
   toggleStaffActive,

@@ -7,8 +7,10 @@ import InputField from "../../components/forms/InputField";
 import { authAPI } from "../../api/authAPI";
 import { useAuthStore } from "../../store/authStore";
 import { isValidPhoneNumber, normalizePhoneNumber } from "../../utils/phone";
+import { useTranslation } from "react-i18next";
 
 export default function Register() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
   const [form, setForm] = useState({
@@ -29,37 +31,37 @@ export default function Register() {
     const confirmPassword = form.confirm_password.trim();
 
     if (!fullName) {
-      toast.error("Full name is required");
+      toast.error(`${t("shared.fullName")} ${t("shared.required")}`);
       return;
     }
 
     if (!email && !phone) {
-      toast.error("Email or phone is required");
+      toast.error(`${t("auth.emailOrPhone")} ${t("shared.required")}`);
       return;
     }
 
     if (form.phone.trim() && !isValidPhoneNumber(phone)) {
-      toast.error("Enter a valid phone number");
+      toast.error(t("auth.validPhone"));
       return;
     }
 
     if (email && !password) {
-      toast.error("Password is required when using email registration");
+      toast.error(`${t("auth.password")} ${t("shared.required")}`);
       return;
     }
 
     if (password && password.length < 8) {
-      toast.error("Password must be at least 8 characters");
+      toast.error(t("auth.passwordRule"));
       return;
     }
 
     if ((email || password) && !confirmPassword) {
-      toast.error("Please confirm your password");
+      toast.error(`${t("auth.confirmPassword")} ${t("shared.required")}`);
       return;
     }
 
     if (password && confirmPassword && password !== confirmPassword) {
-      toast.error("Password and confirm password do not match");
+      toast.error(t("auth.passwordMismatch"));
       return;
     }
     
@@ -75,25 +77,25 @@ export default function Register() {
       if (response?.data?.token && response?.data?.user) {
         setAuth({ token: response.data.token, user: response.data.user });
       }
-      toast.success("Account created successfully");
+      toast.success(t("auth.accountCreated"));
       navigate("/customer");
     } catch (error) {
-      toast.error(error?.response?.data?.error || "Registration failed");
+      toast.error(t("shared.actionFailed"));
     }
   };
 
   return (
     <div className="container-shell py-10">
-      <PageHeader eyebrow="Register" title="Create your guest profile" description="Save rooms, manage trips, upload ID details, and use pay-later booking with a single guest account." />
+      <PageHeader eyebrow={t("auth.createAccount")} title={t("auth.registerTitle")} description={t("auth.registerSubtitle")} />
       <form className="mx-auto mt-8 max-w-2xl section-card p-6 space-y-4" onSubmit={handleSubmit}>
-        <InputField label="Full Name" value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} />
-        <InputField label="Email" type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-        <InputField label="Phone (Optional)" placeholder="+919876543210" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
-        <InputField label="Password" type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
-        <InputField label="Confirm Password" type="password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} />
-        <p className="text-xs text-mutedText">Password must be at least 8 characters when using email registration.</p>
-        <Button className="w-full" type="submit">Create Account</Button>
-        <p className="text-sm text-mutedText">Already have an account? <Link className="text-godavari" to="/login">Login</Link></p>
+        <InputField label={t("shared.fullName")} value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} />
+        <InputField label={t("shared.email")} type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+        <InputField label={`${t("shared.phone")} (${t("shared.optional")})`} placeholder="+919876543210" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+        <InputField label={t("auth.password")} type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+        <InputField label={t("auth.confirmPassword")} type="password" value={form.confirm_password} onChange={(event) => setForm({ ...form, confirm_password: event.target.value })} />
+        <p className="text-xs text-mutedText">{t("auth.passwordRule")}</p>
+        <Button className="w-full" type="submit">{t("auth.createAccount")}</Button>
+        <p className="text-sm text-mutedText">{t("auth.alreadyAccount")} <Link className="text-godavari" to="/login">{t("common.login")}</Link></p>
       </form>
     </div>
   );

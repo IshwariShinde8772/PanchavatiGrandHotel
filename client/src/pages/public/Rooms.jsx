@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import PageHeader from "../../components/common/PageHeader";
@@ -10,7 +10,7 @@ import { useRooms } from "../../hooks/useRooms";
 
 export default function Rooms() {
   const { t } = useTranslation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [filters, setFilters] = useState({
     checkIn: searchParams.get("checkIn") || "",
     checkOut: searchParams.get("checkOut") || "",
@@ -21,6 +21,14 @@ export default function Rooms() {
   const { data, isLoading } = useRooms(filters);
 
   const compareRooms = useMemo(() => (data?.data || []).slice(0, 2), [data]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== "" && value !== null && value !== undefined) next.set(key, value);
+    });
+    setSearchParams(next, { replace: true });
+  }, [filters, setSearchParams]);
 
   return (
     <div className="container-shell py-10">
@@ -40,8 +48,23 @@ export default function Rooms() {
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {isLoading
               ? Array.from({ length: 6 }).map((_, index) => <SkeletonCard key={index} />)
-              : (data?.data || []).map((room) => <RoomCard key={room.id} room={room} />)}
+              : (data?.data || []).map((room) => (
+                  <RoomCard
+                    key={room.id}
+                    room={room}
+                    bookingParams={{
+                      checkIn: filters.checkIn,
+                      checkOut: filters.checkOut,
+                      guests: filters.guests,
+                    }}
+                  />
+                ))}
           </div>
+          {!isLoading && (data?.data || []).length === 0 ? (
+            <div className="section-card p-8 text-center text-mutedText">
+              No rooms match the selected dates, occupancy, and filters.
+            </div>
+          ) : null}
           <RoomCompareDrawer rooms={compareRooms} />
         </div>
       </div>

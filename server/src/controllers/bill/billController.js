@@ -3,7 +3,7 @@ const { generateBill, buildBillData } = require("../../services/billService");
 const { createBillPdfBuffer } = require("../../services/pdfService");
 
 async function generateBookingBill(req, res) {
-  const bill = await generateBill(req.body.booking_id, req.body.extras || []);
+  const bill = await generateBill(req.body.booking_id, req.body.extras || [], undefined, req.user);
   return res.status(201).json({
     success: true,
     data: bill,
@@ -12,6 +12,7 @@ async function generateBookingBill(req, res) {
 }
 
 async function getBookingBill(req, res) {
+  await buildBillData(req.params.bookingId, []);
   const bill = await Bill.findOne({
     where: { booking_id: req.params.bookingId },
     include: [{ model: Booking, as: "booking" }],

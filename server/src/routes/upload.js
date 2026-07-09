@@ -2,9 +2,10 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
-const { uploadImage } = require("../controllers/upload/uploadController");
+const { uploadImage, uploadCloudinaryDocument, getSecurePhotoUrl } = require("../controllers/upload/uploadController");
 const authMiddleware = require("../middleware/authMiddleware");
 const roleGuard = require("../middleware/roleGuard");
+const memoryUpload = require("../middleware/upload");
 const { uploadsDir } = require("../bootstrap/database");
 
 const router = express.Router();
@@ -139,6 +140,21 @@ router.post(
   uploadImage
 );
 
+router.post(
+  "/cloudinary",
+  authMiddleware,
+  roleGuard(["admin", "receptionist", "manager", "customer"]),
+  memoryUpload.single("file"),
+  uploadCloudinaryDocument
+);
+
+router.get(
+  "/secure-photo-url",
+  authMiddleware,
+  roleGuard(["admin", "receptionist", "manager"]),
+  getSecurePhotoUrl
+);
+
 router.use((error, req, res, next) => {
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({
@@ -162,4 +178,3 @@ router.use((error, req, res, next) => {
 });
 
 module.exports = router;
-

@@ -2,7 +2,9 @@ const express = require("express");
 const validate = require("../middleware/validate");
 const {
   createBookingSchema,
+  staySelectionSchema,
   verifyPaymentSchema,
+  paymentFailureSchema,
   cancelBookingSchema,
 } = require("../validators/bookingValidator");
 const { generateBillSchema } = require("../validators/billValidator");
@@ -26,10 +28,15 @@ const {
 } = require("../controllers/payment/transactionController");
 const {
   createBooking,
+  quoteBooking,
   verifyBookingPayment,
+  markBookingPaymentFailed,
   listCustomerBookings,
   getCustomerBooking,
   cancelBooking,
+  previewCancellation,
+  createReservedPaymentOrder,
+  verifyReservedPayment,
 } = require("../controllers/booking/bookingController");
 const {
   createBookingExtensionRequest,
@@ -37,6 +44,8 @@ const {
   payExtensionRequest,
 } = require("../controllers/booking/extensionController");
 const { extensionRequestSchema } = require("../validators/bookingValidator");
+const { validateCustomerCoupon } = require("../controllers/coupon/couponController");
+const { couponValidationSchema } = require("../validators/couponValidator");
 const { submitFeedback } = require("../controllers/feedback/feedbackController");
 const { getBookingBill, downloadBookingBill } = require("../controllers/bill/billController");
 
@@ -46,10 +55,16 @@ router.get("/me", getProfile);
 router.put("/profile", updateProfile);
 
 router.get("/bookings", listCustomerBookings);
+router.post("/bookings/quote", validate(staySelectionSchema), quoteBooking);
+router.post("/coupons/validate", validate(couponValidationSchema), validateCustomerCoupon);
 router.get("/bookings/:id", getCustomerBooking);
 router.post("/bookings", validate(createBookingSchema), createBooking);
 router.post("/bookings/verify-payment", validate(verifyPaymentSchema), verifyBookingPayment);
+router.post("/bookings/:id/payment-order", createReservedPaymentOrder);
+router.post("/bookings/:id/verify-reserved-payment", validate(verifyPaymentSchema.omit({ booking_id: true })), verifyReservedPayment);
+router.post("/bookings/:id/payment-failed", validate(paymentFailureSchema), markBookingPaymentFailed);
 router.post("/bookings/:id/cancel", validate(cancelBookingSchema), cancelBooking);
+router.get("/bookings/:id/cancellation-preview", previewCancellation);
 router.post("/bookings/:id/extensions", validate(extensionRequestSchema), createBookingExtensionRequest);
 router.get("/bookings/:id/extensions", getBookingExtensionRequests);
 router.post("/bookings/:bookingId/extensions/:id/pay", payExtensionRequest);

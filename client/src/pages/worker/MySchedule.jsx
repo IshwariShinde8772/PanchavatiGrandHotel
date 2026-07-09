@@ -1,18 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import PageHeader from "../../components/common/PageHeader";
 import { workerAPI } from "../../api/workerAPI";
+import { useTranslation } from "react-i18next";
 
-const WEEK_DAYS = [
-  { key: "monday", label: "Monday" },
-  { key: "tuesday", label: "Tuesday" },
-  { key: "wednesday", label: "Wednesday" },
-  { key: "thursday", label: "Thursday" },
-  { key: "friday", label: "Friday" },
-  { key: "saturday", label: "Saturday" },
-  { key: "sunday", label: "Sunday" },
-];
+const WEEK_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 export default function MySchedule() {
+  const { t } = useTranslation();
   const { data, isLoading } = useQuery({
     queryKey: ["worker-my-schedule"],
     queryFn: () => workerAPI.getMySchedule(),
@@ -23,19 +17,19 @@ export default function MySchedule() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="My Schedule"
-        title="Weekly shift calendar"
-        description="Shift timings are pulled from your staff schedule for quick checks during your shift."
+        eyebrow={t("ops.mySchedule")}
+        title={t("ops.weeklyCalendar")}
+        description={t("ops.scheduleDescription")}
       />
 
       {isLoading ? (
-        <div className="section-card p-5 text-sm text-mutedText">Loading schedule...</div>
+        <div className="section-card p-5 text-sm text-mutedText">{t("ops.loadingSchedule")}</div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {WEEK_DAYS.map((day) => (
-            <div key={day.key} className="section-card p-5">
-              <p className="font-heading text-2xl">{day.label}</p>
-              <p className="mt-2 text-sm text-mutedText">{schedule[day.key] || "Off"}</p>
+            <div key={day} className="section-card p-5">
+              <p className="font-heading text-2xl">{t(`ops.${day}`)}</p>
+              <p className="mt-2 text-sm text-mutedText">{schedule[day] || t("ops.offDuty")}</p>
             </div>
           ))}
         </div>
@@ -43,4 +37,3 @@ export default function MySchedule() {
     </div>
   );
 }
-

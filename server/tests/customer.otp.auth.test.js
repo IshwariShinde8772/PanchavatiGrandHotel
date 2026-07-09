@@ -4,10 +4,6 @@ jest.mock("../models", () => ({
   },
 }));
 
-jest.mock("../src/config/smsGateway", () => ({
-  sendSms: jest.fn(),
-}));
-
 jest.mock("../src/services/otpService", () => ({
   generateOtp: jest.fn(() => "123456"),
   hashOtp: jest.fn(() => Promise.resolve("hashed-otp")),
@@ -19,8 +15,8 @@ jest.mock("../src/services/emailService", () => ({
 }));
 
 const { Customer } = require("../models");
-const { sendSms } = require("../src/config/smsGateway");
 const { generateOtp, hashOtp } = require("../src/services/otpService");
+const { sendEmail } = require("../src/services/emailService");
 const { sendOtpCode } = require("../src/controllers/auth/customerAuth");
 
 function createResponse() {
@@ -33,7 +29,7 @@ function createResponse() {
 describe("Customer OTP authentication", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    sendSms.mockResolvedValue({ success: true, provider: "test" });
+    sendEmail.mockResolvedValue({ success: true, provider: "test" });
   });
 
   it("does not send OTP or create a customer for an unregistered mobile number", async () => {
@@ -51,7 +47,7 @@ describe("Customer OTP authentication", () => {
     });
     expect(generateOtp).not.toHaveBeenCalled();
     expect(hashOtp).not.toHaveBeenCalled();
-    expect(sendSms).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
       success: false,
@@ -63,6 +59,7 @@ describe("Customer OTP authentication", () => {
     const customer = {
       id: 7,
       full_name: "Registered Guest",
+      email: "shubham@example.com",
       otp_expires_at: null,
       update: jest.fn().mockResolvedValue(),
     };
@@ -77,15 +74,19 @@ describe("Customer OTP authentication", () => {
       otp_expires_at: expect.any(Date),
       otp_verified: false,
     });
-    expect(sendSms).toHaveBeenCalledWith(
-      "+919876543210",
-      "Your Panchavati Grand OTP is 123456. It is valid for 10 minutes.",
-      { otp: "123456" }
-    );
+    expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({
+      to: "shubham@example.com",
+      subject: "Your Panchavati Grand login OTP",
+      text: expect.stringContaining("123456"),
+    }));
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
-        message: "OTP sent successfully",
+        message: "OTP sent to your registered email: sh*****@example.com",
+        data: expect.objectContaining({
+          delivery: "email",
+          masked_email: "sh*****@example.com",
+        }),
       })
     );
   });
@@ -94,6 +95,7 @@ describe("Customer OTP authentication", () => {
     const customer = {
       id: 7,
       full_name: "Registered Guest",
+      email: "guest@example.com",
       otp_expires_at: new Date(Date.now() + 10 * 60 * 1000),
       update: jest.fn(),
     };
@@ -104,11 +106,49 @@ describe("Customer OTP authentication", () => {
     await sendOtpCode(req, res);
 
     expect(customer.update).not.toHaveBeenCalled();
-    expect(sendSms).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(429);
     expect(res.json).toHaveBeenCalledWith({
       success: false,
       error: expect.stringContaining("Please wait"),
     });
+  });
+
+  it("rejects phone login when the account has no registered email", async () => {
+    Customer.findOne.mockResolvedValue({
+      id: 7,
+      email: null,
+      otp_expires_at: null,
+      update: jest.fn(),
+    });
+    const req = { body: { phone: "+919876543210" } };
+    const res = createResponse();
+
+    await sendOtpCode(req, res);
+
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: expect.stringContaining("not linked to a registered email"),
+    });
+  });
+
+  it("does not store an OTP when email delivery fails", async () => {
+    const customer = {
+      id: 7,
+      email: "guest@example.com",
+      otp_expires_at: null,
+      update: jest.fn(),
+    };
+    Customer.findOne.mockResolvedValue(customer);
+    sendEmail.mockResolvedValue({ success: false, error: "SMTP unavailable" });
+    const req = { body: { phone: "+919876543210" } };
+    const res = createResponse();
+
+    await sendOtpCode(req, res);
+
+    expect(customer.update).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(502);
   });
 });

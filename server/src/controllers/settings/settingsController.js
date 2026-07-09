@@ -6,7 +6,20 @@ async function getSettings(req, res) {
 }
 
 async function getPublicSettings(req, res) {
-  const settings = await HotelSetting.findByPk(1);
+  const settings = await HotelSetting.findByPk(1, {
+    attributes: [
+      "id",
+      "hotel_name",
+      "logo_url",
+      "address",
+      "phone",
+      "email",
+      "whatsapp",
+      "check_in_time",
+      "check_out_time",
+      "cancellation_policy_text",
+    ],
+  });
   return res.json({
     success: true,
     data: settings,

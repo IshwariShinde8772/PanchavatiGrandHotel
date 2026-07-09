@@ -7,7 +7,8 @@ export default function LanguageSwitcher({ compact = false }) {
   const { i18n, t } = useTranslation();
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
-  const selectedLanguage = supportedLanguages.find((language) => language.code === i18n.language) || supportedLanguages[0];
+  const currentLanguage = String(i18n.resolvedLanguage || i18n.language || "en").split("-")[0];
+  const selectedLanguage = supportedLanguages.find((language) => language.code === currentLanguage) || supportedLanguages[0];
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -52,7 +53,7 @@ export default function LanguageSwitcher({ compact = false }) {
           </div>
           <div role="listbox" aria-label={t("common.language")} className="space-y-1">
             {supportedLanguages.map((language) => {
-              const active = language.code === i18n.language;
+              const active = language.code === currentLanguage;
 
               return (
                 <button

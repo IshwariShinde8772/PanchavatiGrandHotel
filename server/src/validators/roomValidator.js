@@ -7,10 +7,6 @@ const nullableDateSchema = z.preprocess(
   z.string().nullable().optional()
 );
 
-const nullablePositiveNumberSchema = z.preprocess(
-  emptyStringToNull,
-  z.coerce.number().positive().nullable().optional()
-);
 const nullablePercentSchema = z.preprocess(
   emptyStringToNull,
   z.coerce.number().min(0).max(100).nullable().optional()
@@ -108,6 +104,34 @@ const imageReferenceArraySchema = z.preprocess(
   z.array(imageReferenceSchema)
 );
 
+const amenityIdArraySchema = z.array(
+  z.coerce.number().int().positive()
+).max(100).refine(
+  (ids) => new Set(ids).size === ids.length,
+  "Amenity IDs must be unique"
+);
+
+const roomCategorySchema = z.preprocess(
+  (value) => {
+    if (typeof value !== "string") return value;
+    const categories = {
+      standard: "Standard",
+      deluxe: "Deluxe",
+      regular: "Regular",
+    };
+    return categories[value.trim().toLocaleLowerCase()] || value;
+  },
+  z.enum(["Standard", "Deluxe", "Regular"])
+);
+
+function isValidDateRange(checkIn, checkOut) {
+  if (!checkIn && !checkOut) return true;
+  if (!checkIn || !checkOut) return false;
+  const start = new Date(`${checkIn}T00:00:00.000Z`);
+  const end = new Date(`${checkOut}T00:00:00.000Z`);
+  return !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime()) && end > start;
+}
+
 const roomQuerySchema = z.object({
   checkIn: z.string().optional(),
   checkOut: z.string().optional(),
@@ -119,23 +143,33 @@ const roomQuerySchema = z.object({
   viewType: z.string().optional(),
   page: z.coerce.number().int().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
-}).passthrough();
+}).passthrough().refine((data) => isValidDateRange(data.checkIn, data.checkOut), {
+  message: "Check-in and check-out must be a valid date range",
+  path: ["checkOut"],
+});
+
+const roomDetailQuerySchema = z.object({
+  checkIn: z.string().optional(),
+  checkOut: z.string().optional(),
+  calendarStart: z.string().optional(),
+}).passthrough().refine((data) => isValidDateRange(data.checkIn, data.checkOut), {
+  message: "Check-in and check-out must be a valid date range",
+  path: ["checkOut"],
+});
 
 const roomCreateSchema = z.object({
   room_number: z.string().min(1),
   name: z.string().min(2),
-  category: z.enum(["Standard", "Deluxe", "Suite", "Family", "Presidential"]),
+  category: roomCategorySchema,
   description: z.string().min(10),
   base_price: z.coerce.number().positive(),
-  seasonal_price: nullablePositiveNumberSchema,
-  seasonal_start: nullableDateSchema,
-  seasonal_end: nullableDateSchema,
   discount_pct: nullablePercentSchema,
   discount_start: nullableDateSchema,
   discount_end: nullableDateSchema,
   total_units: z.coerce.number().int().min(1).default(1),
   capacity: z.coerce.number().int().min(1),
   amenities: z.array(z.string()).default([]),
+  amenity_ids: amenityIdArraySchema.default([]),
   images: imageReferenceArraySchema.default([]),
   floor: nullableIntegerSchema,
   view_type: z.preprocess(emptyStringToNull, z.string().nullable().optional()),
@@ -149,18 +183,16 @@ const roomCreateSchema = z.object({
 const roomUpdateSchema = z.object({
   room_number: z.string().min(1).optional(),
   name: z.string().min(2).optional(),
-  category: z.enum(["Standard", "Deluxe", "Suite", "Family", "Presidential"]).optional(),
+  category: roomCategorySchema.optional(),
   description: z.string().min(10).optional(),
   base_price: z.coerce.number().positive().optional(),
-  seasonal_price: nullablePositiveNumberSchema,
-  seasonal_start: nullableDateSchema,
-  seasonal_end: nullableDateSchema,
   discount_pct: nullablePercentSchema,
   discount_start: nullableDateSchema,
   discount_end: nullableDateSchema,
   total_units: z.coerce.number().int().min(1).optional(),
   capacity: z.coerce.number().int().min(1).optional(),
   amenities: z.array(z.string()).optional(),
+  amenity_ids: amenityIdArraySchema.optional(),
   images: imageReferenceArraySchema.optional(),
   floor: nullableIntegerSchema,
   view_type: z.preprocess(emptyStringToNull, z.string().nullable().optional()),
@@ -173,6 +205,7 @@ const roomUpdateSchema = z.object({
 
 module.exports = {
   roomQuerySchema,
+  roomDetailQuerySchema,
   roomCreateSchema,
   roomUpdateSchema,
 };

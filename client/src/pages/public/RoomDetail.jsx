@@ -1,6 +1,7 @@
-import { Link, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Phone } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { roomCategoryLabel } from "../../utils/i18nLabels";
 import PageHeader from "../../components/common/PageHeader";
 import RoomGallery from "../../components/room/RoomGallery";
 import AvailabilityCalendar from "../../components/room/AvailabilityCalendar";
@@ -9,11 +10,23 @@ import PriceBreakdown from "../../components/room/PriceBreakdown";
 import Button from "../../components/common/Button";
 import RoomCard from "../../components/room/RoomCard";
 import { useRoomDetail } from "../../hooks/useRooms";
+import { useAuthStore } from "../../store/authStore";
 
 export default function RoomDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { t } = useTranslation();
-  const { data: room } = useRoomDetail(id);
+  const checkIn = searchParams.get("checkIn") || "";
+  const checkOut = searchParams.get("checkOut") || "";
+  const guests = searchParams.get("guests") || "";
+  const { data: room } = useRoomDetail(id, {
+    checkIn,
+    checkOut,
+    calendarStart: checkIn || undefined,
+  });
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const token = useAuthStore((state) => state.token);
 
   if (!room) return null;
 
@@ -22,6 +35,26 @@ export default function RoomDetail() {
   const finalPrice = Number(pricing.finalPrice ?? pricing.pricePerNight ?? room.base_price ?? 0);
   const hasDiscount = Boolean(pricing.hasDiscount && pricing.discountAmount > 0);
   const activeOffer = pricing.offer;
+  const stayParams = new URLSearchParams();
+  if (checkIn) stayParams.set("checkIn", checkIn);
+  if (checkOut) stayParams.set("checkOut", checkOut);
+  if (guests) stayParams.set("guests", guests);
+  const bookingPath = `/book/${room.id}${stayParams.toString() ? `?${stayParams.toString()}` : ""}`;
+  const canBook = room.availability?.available !== false;
+  const amenityItems = room.amenity_details?.length
+    ? room.amenity_details
+    : (room.amenities || []);
+
+  const handleBookNow = () => {
+    if (!canBook) return;
+    if (!isAuthenticated || !token) {
+      navigate(`/login?redirectTo=${encodeURIComponent(bookingPath)}`, {
+        state: { redirectTo: bookingPath },
+      });
+      return;
+    }
+    navigate(bookingPath);
+  };
 
   return (
     <div className="container-shell py-10">
@@ -31,21 +64,31 @@ export default function RoomDetail() {
           <RoomGallery images={room.images} />
           <div className="section-card p-6">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="rounded-full bg-gold px-3 py-1 text-xs font-semibold">{room.category}</span>
+              <span className="rounded-full bg-gold px-3 py-1 text-xs font-semibold">{roomCategoryLabel(t, room.category)}</span>
               <span className="rounded-full bg-saffronLight px-3 py-1 text-xs font-semibold">{room.room_number}</span>
               <span className="rounded-full bg-saffronLight px-3 py-1 text-xs font-semibold">{t("common.floor")} {room.floor}</span>
             </div>
             <p className="mt-4 text-mutedText">{room.description}</p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {(room.amenities || []).map((amenity) => (
-                <RoomAmenitiesChip key={amenity} amenity={amenity} />
-              ))}
+            <div className="mt-6 border-t border-divider pt-5">
+              <h3 className="font-heading text-xl text-vineyard">{t("bookingUi.amenities")}</h3>
+              {amenityItems.length ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {amenityItems.map((amenity) => (
+                    <RoomAmenitiesChip
+                      key={typeof amenity === "string" ? amenity : amenity.id}
+                      amenity={amenity}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-mutedText">{t("ops.noAmenitiesSelected")}</p>
+              )}
             </div>
           </div>
           <div className="section-card p-6" id="calendar-section">
             <h3 className="font-heading text-2xl">{t("publicPages.availabilityCalendar")}</h3>
             <div className="mt-5">
-              <AvailabilityCalendar basePrice={finalPrice} bookedDates={room.booked_dates || []} />
+              <AvailabilityCalendar days={room.availability_calendar || []} />
             </div>
           </div>
           <div className="section-card p-6">
@@ -93,7 +136,14 @@ export default function RoomDetail() {
               />
             </div>
             <div className="mt-6 grid gap-3">
-              <Button as={Link} to={`/book/${room.id}`}>{t("common.bookNow")}</Button>
+              <Button
+                type="button"
+                disabled={!canBook}
+                className="disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={handleBookNow}
+              >
+                {canBook ? t("common.bookNow") : t("common.soldOut")}
+              </Button>
               <Button variant="outline" onClick={() => document.getElementById("calendar-section")?.scrollIntoView({ behavior: "smooth" })}>
                 {t("common.checkAvailability")}
               </Button>
@@ -106,7 +156,12 @@ export default function RoomDetail() {
             <h3 className="font-heading text-2xl">{t("publicPages.similarRooms")}</h3>
             <div className="mt-5 space-y-4">
               {(room.similar_rooms || []).map((item) => (
-                <RoomCard key={item.id} room={item} compact />
+                <RoomCard
+                  key={item.id}
+                  room={item}
+                  compact
+                  bookingParams={{ checkIn, checkOut, guests }}
+                />
               ))}
             </div>
           </div>

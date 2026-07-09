@@ -1,17 +1,20 @@
 import Button from "../common/Button";
+import { useTranslation } from "react-i18next";
 
-export default function PostponePaymentOption({ onReserve, busy = false }) {
+export default function PostponePaymentOption({ onReserve, busy = false, totalAmount = 0, advanceAmount }) {
+  const { t } = useTranslation();
+  const advance = Number(advanceAmount ?? Number(totalAmount || 0) * 0.1);
   return (
     <div className="rounded-[28px] border-2 border-saffron bg-saffronLight p-5">
-      <h3 className="font-heading text-2xl">Reserve Now. Pay When You Arrive.</h3>
+      <h3 className="font-heading text-2xl">{t("bookingUi.reserveAdvance")}</h3>
       <ul className="mt-4 space-y-2 text-sm text-mutedText">
-        <li>No payment needed today</li>
-        <li>Room fully reserved in your name</li>
-        <li>Pay by cash, card, or UPI at check-in</li>
-        <li>Free cancellation up to 48h before arrival</li>
+        <li>{t("shared.totalAmount")}: INR {Number(totalAmount || 0).toFixed(2)}</li>
+        <li>{t("bookingUi.advancePayable")}: INR {advance.toFixed(2)}</li>
+        <li>{t("bookingUi.remainingAtHotel")}: INR {Math.max(Number(totalAmount || 0) - advance, 0).toFixed(2)}</li>
+        <li>{t("bookingUi.cancellationPolicyShort")}</li>
       </ul>
       <Button variant="gold" className="mt-5 w-full" onClick={onReserve} disabled={busy}>
-        {busy ? "Reserving..." : "Reserve Room"}
+        {busy ? t("shared.processing") : t("bookingUi.payAndReserve")}
       </Button>
     </div>
   );

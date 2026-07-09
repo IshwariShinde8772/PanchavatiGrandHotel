@@ -8,6 +8,7 @@ function baseConfig() {
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT || 3306),
     dialect: "mysql",
+    timezone: "+00:00",
   };
 }
 

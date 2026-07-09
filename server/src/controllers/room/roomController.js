@@ -1,7 +1,27 @@
 const { Op } = require("sequelize");
-const { Room, Feedback, HotelSetting, Booking } = require("../../../models");
-const { listRoomsWithAvailability, calculateEffectivePrice, getAvailabilityForRoom, listActiveOffers, normalizeRoomRecord } = require("../../services/roomService");
+const { Room, HotelSetting, Booking, Task, sequelize } = require("../../../models");
+const {
+  listRoomsWithAvailability,
+  calculateEffectivePrice,
+  getAvailabilityCalendar,
+  getAvailabilityForRoom,
+  listActiveOffers,
+  normalizeRoomRecord,
+  refreshExpiredNoShows,
+} = require("../../services/roomService");
 const { getPagination } = require("../../utils/pagination");
+const { listPublicCoupons } = require("../../services/couponService");
+const { listPublicFeedback } = require("../../services/feedbackService");
+const env = require("../../config/env");
+const { getBusinessDate } = require("../../utils/dateHelpers");
+const {
+  amenityInclude,
+  getRoomAmenityIds,
+  replaceRoomAmenities,
+  validateAmenitySelection,
+} = require("../../services/amenityService");
+const { writeAudit } = require("../../services/auditService");
+const { formatToIST } = require("../../utils/dateHelpers");
 
 function normalizeStringArray(value) {
   if (Array.isArray(value)) {
@@ -37,6 +57,9 @@ function normalizeRoomPayload(payload) {
   const normalized = {
     ...payload,
   };
+  const usesManagedAmenities = normalized.amenity_ids !== undefined;
+  delete normalized.amenity_ids;
+  if (usesManagedAmenities) delete normalized.amenities;
 
   if ("room_number" in normalized && typeof normalized.room_number === "string") {
     normalized.room_number = normalized.room_number.trim();
@@ -58,7 +81,7 @@ function normalizeRoomPayload(payload) {
     normalized.images = normalizeStringArray(normalized.images);
   }
 
-  for (const key of ["seasonal_start", "seasonal_end", "discount_start", "discount_end", "view_type", "bed_type", "nashik_landmark"]) {
+  for (const key of ["discount_start", "discount_end", "view_type", "bed_type", "nashik_landmark"]) {
     if (key in normalized) {
       normalized[key] = normalizeNullable(normalized[key]);
     }
@@ -80,36 +103,43 @@ async function listRooms(req, res) {
     total: rooms.length,
     page,
     limit,
+    totalRecords: rooms.length,
+    totalPages: Math.max(Math.ceil(rooms.length / limit), 1),
+    currentPage: page,
+    pageSize: limit,
   });
 }
 
 async function getRoomDetail(req, res) {
-  const room = await Room.findByPk(req.params.id);
+  await refreshExpiredNoShows();
+  const room = await Room.findByPk(req.params.id, {
+    include: [amenityInclude({ activeOnly: true })],
+  });
   if (!room) {
     return res.status(404).json({ success: false, error: "Room not found" });
   }
 
   const availability = await getAvailabilityForRoom(room, req.query.checkIn, req.query.checkOut);
   
-  // Fetch booked dates for the calendar (next 30 days)
+  const today = getBusinessDate(new Date(), env.hotelTimeZone);
+  const calendarStart = req.query.calendarStart || today;
+  const availabilityCalendar = await getAvailabilityCalendar(room, calendarStart, 30);
+
+  // Retained for backward compatibility with existing clients.
   const bookedDates = await Booking.findAll({
     where: {
       room_id: room.id,
-      status: { [Op.in]: ["confirmed", "checked_in"] },
-      check_out: { [Op.gt]: new Date() }
+      status: { [Op.in]: ["reserved", "confirmed", "checked_in"] },
+      check_out: { [Op.gt]: calendarStart },
     },
-    attributes: ["check_in", "check_out"]
+    attributes: ["check_in", "check_out", "status"],
   });
 
-  const effectiveDate = req.query.checkIn || new Date().toISOString().slice(0, 10);
+  const effectiveDate = req.query.checkIn || today;
   const activeOffers = await listActiveOffers(effectiveDate);
   const pricing = calculateEffectivePrice(room, req.query.checkIn, activeOffers);
-  const reviews = await Feedback.findAll({
-    where: {
-      room_category: room.category,
-      status: "published",
-    },
-    order: [["created_at", "DESC"]],
+  const reviews = await listPublicFeedback({
+    where: { room_category: room.category },
     limit: 6,
   });
   const similarRooms = (await listRoomsWithAvailability({ category: room.category }))
@@ -119,9 +149,10 @@ async function getRoomDetail(req, res) {
   return res.json({
     success: true,
     data: {
-      ...normalizeRoomRecord(room),
+      ...normalizeRoomRecord(room, { publicView: true }),
       pricing,
       availability,
+      availability_calendar: availabilityCalendar,
       booked_dates: bookedDates,
       reviews,
       similar_rooms: similarRooms,
@@ -130,16 +161,26 @@ async function getRoomDetail(req, res) {
 }
 
 async function getHomeCatalogue(req, res) {
-  const today = new Date().toISOString().slice(0, 10);
-  const [hotelSettings, featuredRooms, testimonials, offers] = await Promise.all([
-    HotelSetting.findByPk(1),
-    listRoomsWithAvailability({}).then((rooms) => rooms.slice(0, 4)),
-    Feedback.findAll({
-      where: { status: "published" },
-      order: [["created_at", "DESC"]],
-      limit: 6,
+  const today = getBusinessDate(new Date(), env.hotelTimeZone);
+  const [hotelSettings, featuredRooms, testimonials, offers, publicCoupons] = await Promise.all([
+    HotelSetting.findByPk(1, {
+      attributes: [
+        "id",
+        "hotel_name",
+        "logo_url",
+        "address",
+        "phone",
+        "email",
+        "whatsapp",
+        "check_in_time",
+        "check_out_time",
+        "cancellation_policy_text",
+      ],
     }),
+    listRoomsWithAvailability({}).then((rooms) => rooms.slice(0, 4)),
+    listPublicFeedback({ limit: 6 }),
     listActiveOffers(today).then((activeOffers) => activeOffers.slice(0, 6)),
+    listPublicCoupons(today),
   ]);
 
   return res.json({
@@ -149,40 +190,100 @@ async function getHomeCatalogue(req, res) {
       featuredRooms,
       testimonials,
       offers,
+      publicCoupons,
     },
   });
 }
 
 async function listAdminRooms(req, res) {
-  const rooms = await Room.findAll({ order: [["floor", "ASC"], ["room_number", "ASC"]] });
+  const { page, limit, offset } = getPagination(req.query);
+  const { count, rows } = await Room.findAndCountAll({
+    include: [amenityInclude()],
+    distinct: true,
+    order: [["floor", "ASC"], ["room_number", "ASC"]],
+    offset,
+    limit,
+  });
   return res.json({
     success: true,
-    data: rooms.map((room) => normalizeRoomRecord(room)),
-    total: rooms.length,
-    page: 1,
-    limit: rooms.length || 10,
+    data: rows.map((room) => normalizeRoomRecord(room)),
+    total: count,
+    page,
+    limit,
+    totalRecords: count,
+    totalPages: Math.max(Math.ceil(count / limit), 1),
+    currentPage: page,
+    pageSize: limit,
   });
 }
 
 async function createRoom(req, res) {
-  const room = await Room.create(normalizeRoomPayload(req.body));
+  const room = await sequelize.transaction(async (transaction) => {
+    const amenities = await validateAmenitySelection(req.body.amenity_ids || [], {
+      transaction,
+    });
+    const createdRoom = await Room.create(normalizeRoomPayload(req.body), { transaction });
+    await replaceRoomAmenities(createdRoom, amenities, transaction);
+    return createdRoom;
+  });
+  const roomWithAmenities = await Room.findByPk(room.id, {
+    include: [amenityInclude()],
+  });
+
   return res.status(201).json({
     success: true,
-    data: normalizeRoomRecord(room),
+    data: normalizeRoomRecord(roomWithAmenities),
     message: "Room created successfully",
   });
 }
 
 async function updateRoom(req, res) {
-  const room = await Room.findByPk(req.params.id);
+  const room = await sequelize.transaction(async (transaction) => {
+    const existingRoom = await Room.findByPk(req.params.id, { transaction });
+    if (!existingRoom) return null;
+
+    if (req.body.status === "available") {
+      const activeCheckedInCount = await Booking.count({
+        where: { room_id: existingRoom.id, status: "checked_in" },
+        transaction,
+      });
+      if (activeCheckedInCount > 0) {
+        throw Object.assign(
+          new Error("An occupied room cannot be marked available"),
+          { status: 409 }
+        );
+      }
+      if (existingRoom.status === "cleaning") {
+        throw Object.assign(
+          new Error("Use Mark as Cleaned before making this room available"),
+          { status: 409 }
+        );
+      }
+    }
+
+    if (req.body.amenity_ids !== undefined) {
+      const currentAmenityIds = await getRoomAmenityIds(existingRoom.id, transaction);
+      const amenities = await validateAmenitySelection(req.body.amenity_ids, {
+        transaction,
+        allowedInactiveIds: currentAmenityIds,
+      });
+      await replaceRoomAmenities(existingRoom, amenities, transaction);
+    }
+
+    await existingRoom.update(normalizeRoomPayload(req.body), { transaction });
+    return existingRoom;
+  });
+
   if (!room) {
     return res.status(404).json({ success: false, error: "Room not found" });
   }
 
-  await room.update(normalizeRoomPayload(req.body));
+  const roomWithAmenities = await Room.findByPk(room.id, {
+    include: [amenityInclude()],
+  });
   return res.json({
     success: true,
-    data: normalizeRoomRecord(room),
+    data: normalizeRoomRecord(roomWithAmenities),
     message: "Room updated successfully",
   });
 }
@@ -201,13 +302,143 @@ async function deleteRoom(req, res) {
 }
 
 async function getRoomGrid(req, res) {
-  const rooms = await Room.findAll({ order: [["floor", "ASC"], ["room_number", "ASC"]] });
+  const rooms = await Room.findAll({
+    include: [
+      {
+        model: Booking,
+        as: "bookings",
+        attributes: ["id", "status"],
+        where: { status: "checked_in" },
+        required: false,
+      },
+      {
+        model: Task,
+        as: "tasks",
+        attributes: ["id", "status", "task_type"],
+        where: {
+          task_type: "cleaning",
+          status: { [Op.in]: ["pending", "in_progress"] },
+        },
+        required: false,
+      },
+    ],
+    order: [["floor", "ASC"], ["room_number", "ASC"]],
+  });
+  const data = rooms.map((room) => {
+    const normalized = normalizeRoomRecord(room);
+    const hasCheckedInBooking = (normalized.bookings || []).length > 0;
+    const hasPendingCleaning = (normalized.tasks || []).length > 0;
+    const status = room.status === "maintenance"
+      ? "maintenance"
+      : hasCheckedInBooking
+        ? "occupied"
+        : room.status === "cleaning" || hasPendingCleaning
+          ? "cleaning"
+          : "available";
+
+    delete normalized.bookings;
+    delete normalized.tasks;
+
+    return {
+      ...normalized,
+      status,
+      is_bookable: room.is_active && status === "available",
+    };
+  });
+
   return res.json({
     success: true,
-    data: rooms.map((room) => normalizeRoomRecord(room)),
-    total: rooms.length,
+    data,
+    total: data.length,
     page: 1,
-    limit: rooms.length || 10,
+    limit: data.length || 10,
+  });
+}
+
+async function markRoomCleaned(req, res) {
+  const room = await sequelize.transaction(async (transaction) => {
+    const target = await Room.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK?.UPDATE,
+    });
+    if (!target) return null;
+    if (target.status === "maintenance") {
+      throw Object.assign(
+        new Error("A maintenance room cannot be marked cleaned"),
+        { status: 409 }
+      );
+    }
+
+    const activeCheckedInCount = await Booking.count({
+      where: { room_id: target.id, status: "checked_in" },
+      transaction,
+    });
+    if (activeCheckedInCount > 0) {
+      throw Object.assign(
+        new Error("An occupied room cannot be marked available"),
+        { status: 409 }
+      );
+    }
+    const pendingCleaningCount = await Task.count({
+      where: {
+        room_id: target.id,
+        task_type: "cleaning",
+        status: { [Op.in]: ["pending", "in_progress"] },
+      },
+      transaction,
+    });
+    if (target.status !== "cleaning" && pendingCleaningCount === 0) {
+      throw Object.assign(
+        new Error("Only rooms in cleaning can be marked cleaned"),
+        { status: 409 }
+      );
+    }
+
+    const completedAt = new Date();
+    await Task.update(
+      { status: "done", completed_at: completedAt },
+      {
+        where: {
+          room_id: target.id,
+          task_type: "cleaning",
+          status: { [Op.in]: ["pending", "in_progress"] },
+        },
+        transaction,
+      }
+    );
+    await target.update({ status: "available" }, { transaction });
+    await writeAudit({
+      action: "ROOM_MARKED_CLEANED",
+      entityType: "room",
+      entityId: target.id,
+      actor: req.user,
+      module: "rooms",
+      message: `Room ${target.room_number} marked cleaned and available`,
+      metadata: {
+        roomId: target.id,
+        roomNumber: target.room_number,
+        performedBy: req.user?.id || null,
+        role: req.user?.role || "system",
+        timestampUTC: completedAt.toISOString(),
+        timestampIST: formatToIST(completedAt),
+        ipAddress: req.ip || req.headers?.["x-forwarded-for"] || null,
+        userAgent: req.headers?.["user-agent"] || null,
+        oldValue: { status: "cleaning" },
+        newValue: { status: "available" },
+      },
+      transaction,
+    });
+    return target;
+  });
+
+  if (!room) {
+    return res.status(404).json({ success: false, error: "Room not found" });
+  }
+
+  return res.json({
+    success: true,
+    data: normalizeRoomRecord(room),
+    message: "Room marked as cleaned and available",
   });
 }
 
@@ -220,4 +451,5 @@ module.exports = {
   updateRoom,
   deleteRoom,
   getRoomGrid,
+  markRoomCleaned,
 };

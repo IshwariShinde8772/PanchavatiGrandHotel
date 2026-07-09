@@ -5,17 +5,24 @@ import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
 import BillPreview from "../../components/bill/BillPreview";
 import Button from "../../components/common/Button";
-import QrPaymentPanel from "../../components/booking/QrPaymentPanel";
 import { 
   useBookingDetail, 
   useBookingExtensions, 
   useCreateExtensionRequest, 
-  usePayExtensionRequest,
   useExtensionTransactions,
-  useConfirmExtensionTransaction,
-  useDeleteExtensionTransaction,
 } from "../../hooks/useBookings";
 import { formatCurrency } from "../../utils/formatCurrency";
+import {
+  getCustomerRefundStatusLabel,
+  getRefundStatusStyle,
+} from "../../utils/refundStatus";
+import {
+  formatBookingStatus,
+  formatHotelDateTime,
+  formatHotelTime,
+  isNoShowCancellation,
+} from "../../utils/hotelDate";
+import { bookingStatusLabel, paymentStatusLabel } from "../../utils/i18nLabels";
 
 export default function BookingDetail() {
   const { id } = useParams();
@@ -24,15 +31,10 @@ export default function BookingDetail() {
   const { data: extensionsResponse } = useBookingExtensions(id);
   const { data: transactionsResponse } = useExtensionTransactions(id);
   const createExtension = useCreateExtensionRequest();
-  const payExtension = usePayExtensionRequest();
-  const confirmTransaction = useConfirmExtensionTransaction();
-  const deleteTransaction = useDeleteExtensionTransaction();
 
   const extensionRequests = extensionsResponse?.data || [];
   const extensionTransactions = transactionsResponse?.data || [];
   const activeRequest = extensionRequests.find((request) => request.status === "pending" || request.status === "approved") || null;
-  const pendingExtensionTransaction = extensionTransactions.find((t) => t.status === "pending" && t.payment_method === "qr");
-  const [activeTransactionId, setActiveTransactionId] = useState(null);
   const [expandPayments, setExpandPayments] = useState(false);
 
   const [form, setForm] = useState({
@@ -72,20 +74,7 @@ export default function BookingDetail() {
       });
       toast.success(t("customer.extensionSubmitted"));
     } catch (error) {
-      toast.error(error.response?.data?.error || t("customer.extensionFailed"));
-    }
-  };
-
-  const handleConfirmPayment = async () => {
-    if (!activeRequest) {
-      return;
-    }
-
-    try {
-      await payExtension.mutateAsync({ bookingId: id, requestId: activeRequest.id });
-      toast.success(t("customer.extensionPaymentConfirmed"));
-    } catch (error) {
-      toast.error(error.response?.data?.error || t("customer.extensionPaymentFailed"));
+      toast.error(t("customer.extensionFailed"));
     }
   };
 
@@ -94,7 +83,7 @@ export default function BookingDetail() {
       <PageHeader
         eyebrow={t("customer.bookingDetail")}
         title={booking.booking_ref}
-        description={`${booking.room_name || booking.room?.name} • ${booking.status}`}
+        description={`${booking.room_name || booking.room?.name} • ${bookingStatusLabel(t, booking)}`}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
@@ -105,8 +94,24 @@ export default function BookingDetail() {
               <p>{booking.check_in}</p>
             </div>
             <div>
+              <p className="font-semibold">{t("bookingUi.checkInTime")}</p>
+              <p>{formatHotelTime(booking.check_in_time)}</p>
+            </div>
+            <div>
+              <p className="font-semibold">{t("bookingUi.autoCancelDeadline")}</p>
+              <p>{formatHotelDateTime(booking.auto_cancel_at)}</p>
+            </div>
+            <div>
               <p className="font-semibold">{t("customer.checkOut")}</p>
               <p>{booking.check_out}</p>
+            </div>
+            <div>
+              <p className="font-semibold">{t("reception.actualCheckIn")}</p>
+              <p>{formatHotelDateTime(booking.actual_checkin_time)}</p>
+            </div>
+            <div>
+              <p className="font-semibold">{t("reception.actualCheckout")}</p>
+              <p>{formatHotelDateTime(booking.actual_checkout_time)}</p>
             </div>
             <div>
               <p className="font-semibold">{t("common.guests")}</p>
@@ -114,17 +119,50 @@ export default function BookingDetail() {
             </div>
             <div>
               <p className="font-semibold">{t("common.status")}</p>
-              <p>{booking.status}</p>
+              <p>{bookingStatusLabel(t, booking)}</p>
             </div>
             <div>
               <p className="font-semibold">{t("customer.paymentStatus")}</p>
-              <p>{booking.payment_status}</p>
+              <p>{paymentStatusLabel(t, booking.payment_status)}</p>
             </div>
             <div>
               <p className="font-semibold">{t("customer.paymentMethod")}</p>
               <p>{booking.payment_method || t("customer.notSelected")}</p>
             </div>
           </div>
+
+          {booking.status === "cancelled" ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-semibold text-vineyard">
+                  {isNoShowCancellation(booking) ? t("statuses.booking.cancelled_no_show") : t("statuses.booking.cancelled")}
+                </h3>
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${getRefundStatusStyle(booking.refundRequest?.status || booking.refund_status)}`}>
+                  {getCustomerRefundStatusLabel(booking.refundRequest?.status || booking.refund_status, t)}
+                </span>
+              </div>
+              <p className="mt-2">{t("shared.reason")}: {booking.cancellation_reason || t("shared.notAvailable")}</p>
+              {isNoShowCancellation(booking) ? (
+                <p>{t("bookingUi.autoCancelDeadline")}: {formatHotelDateTime(booking.auto_cancelled_at)}</p>
+              ) : null}
+              <p className="mt-2">{t("bookingUi.cancellationCharge")}: {formatCurrency(booking.refundRequest?.cancellation_charge ?? booking.cancellation_charge)}</p>
+              <p>{t("bookingUi.refundAmount")}: {formatCurrency(booking.refundRequest?.refund_amount ?? booking.refund_amount)}</p>
+              <p>{t("bookingUi.policyApplied")}: {booking.refundRequest?.cancellation_policy_applied || booking.cancellation_policy_applied || t("shared.notAvailable")}</p>
+              {booking.refundRequest?.razorpay_refund_id || booking.refundRequest?.refund_transaction_id ? (
+                <p>Razorpay refund reference: {booking.refundRequest.razorpay_refund_id || booking.refundRequest.refund_transaction_id}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {booking.is_early_checkout ? (
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-900">
+              <h3 className="font-semibold">{t("statuses.booking.early_checked_out")}</h3>
+              <p className="mt-2">{t("reception.originalCheckout")}: {booking.original_checkout_date || booking.check_out}</p>
+              <p>{t("reception.actualCheckout")}: {formatHotelDateTime(booking.early_checkout_at || booking.actual_checkout_time)}</p>
+              <p>{t("shared.reason")}: {booking.early_checkout_reason || t("shared.notAvailable")}</p>
+              <p>{t("reception.finalSettlement")}: {t("reception.noAutomaticRefund")}</p>
+            </div>
+          ) : null}
 
           {activeRequest ? (
             <div className="border rounded-2xl border-saffron/20 bg-saffron/5 p-6">
@@ -152,29 +190,16 @@ export default function BookingDetail() {
                 {activeRequest.response_text && <p className="mt-2"><strong>{t("customer.staffNote")}</strong> {activeRequest.response_text}</p>}
               </div>
               {activeRequest.status === "approved" && activeRequest.payment_status === "pending" && (
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-                  <Button onClick={handleConfirmPayment} disabled={payExtension.isLoading}>
-                    {payExtension.isLoading ? t("customer.confirmingPayment") : t("customer.confirmPayment")}
-                  </Button>
-                  <p className="text-sm text-mutedText">{t("customer.extensionPaymentHint")}</p>
+                <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="font-semibold text-amber-900">Extension payment pending</p>
+                  <p className="mt-1 text-sm text-amber-800">
+                    Pay {formatCurrency(activeRequest.extensionRemainingAmount ?? activeRequest.extra_amount)} at reception.
+                    Extension payments are confirmed manually by hotel staff.
+                  </p>
                 </div>
               )}
             </div>
           ) : null}
-
-          {pendingExtensionTransaction && (
-            <QrPaymentPanel
-              transaction={pendingExtensionTransaction}
-              title={t("customer.extensionPaymentQr")}
-              subtitle={t("customer.extensionPaymentSubtitle", { date: activeRequest?.requested_to || t("customer.extensionDate") })}
-              busy={confirmTransaction.isPending}
-              onConfirm={() => confirmTransaction.mutate({ id: pendingExtensionTransaction.id })}
-              onRegenerate={() => {
-                // If regenerate is available for extension transactions
-                toast.info(t("customer.contactReceptionQr"));
-              }}
-            />
-          )}
 
           {extensionTransactions.length > 0 && (
             <div className="border rounded-2xl border-divider p-6">
@@ -208,33 +233,9 @@ export default function BookingDetail() {
                           <p className="text-sm text-mutedText">{t("common.method")}: {transaction.payment_method}</p>
                           {transaction.payment_reference && <p className="text-sm text-mutedText">Ref: {transaction.payment_reference}</p>}
                         </div>
-                        <div className="flex gap-2 flex-shrink-0">
-                          {transaction.status === "pending" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                // View QR
-                                toast.info(t("customer.openingPayment"));
-                              }}
-                            >
-                              {t("customer.view")}
-                            </Button>
-                          ) : null}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (confirm(t("customer.deletePaymentConfirm"))) {
-                                deleteTransaction.mutate({ id: transaction.id });
-                              }
-                            }}
-                            disabled={deleteTransaction.isPending}
-                            className="text-red-600 hover:bg-red-50"
-                          >
-                            {t("common.delete")}
-                          </Button>
-                        </div>
+                        {transaction.paid_at ? (
+                          <p className="text-xs text-mutedText">{formatHotelDateTime(transaction.paid_at)}</p>
+                        ) : null}
                       </div>
                     </div>
                   ))}

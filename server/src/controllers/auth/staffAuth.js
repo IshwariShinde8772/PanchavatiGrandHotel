@@ -3,7 +3,7 @@ const { Staff } = require("../../../models");
 const { sanitizeUser } = require("../../utils/serializers");
 const { signToken } = require("../../utils/token");
 
-const portalStaffRoles = new Set(["receptionist", "manager", "housekeeping", "kitchen", "server"]);
+const portalStaffRoles = new Set(["receptionist", "manager", "housekeeping", "kitchen", "server", "waiter"]);
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();

@@ -8,7 +8,7 @@ const {
   forgotPasswordLimiter,
   resetPasswordLimiter,
 } = require("../middleware/rateLimiter");
-const { roomQuerySchema, roomCreateSchema } = require("../validators/roomValidator");
+const { roomQuerySchema, roomDetailQuerySchema } = require("../validators/roomValidator");
 const {
   sendOtpSchema,
   verifyOtpSchema,
@@ -51,7 +51,7 @@ router.get("/health", (req, res) => {
 router.get("/home", getHomeCatalogue);
 router.get("/settings/public", getPublicSettings);
 router.get("/rooms", validate(roomQuerySchema, "query"), listRooms);
-router.get("/rooms/:id", getRoomDetail);
+router.get("/rooms/:id", validate(roomDetailQuerySchema, "query"), getRoomDetail);
 router.get("/feedbacks/published", listPublishedFeedback);
 router.post("/enquiries", createEnquiry);
 

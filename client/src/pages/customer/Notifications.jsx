@@ -40,7 +40,7 @@ export default function Notifications() {
       queryClient.invalidateQueries({ queryKey: ["customer-notifications"] });
       toast.success(t("customer.notificationDeleted"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || t("customer.notificationDeleteFailed")),
+    onError: () => toast.error(t("customer.notificationDeleteFailed")),
   });
 
   const clearAllMutation = useMutation({
@@ -49,7 +49,7 @@ export default function Notifications() {
       queryClient.invalidateQueries({ queryKey: ["customer-notifications"] });
       toast.success(t("customer.notificationsCleared"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || t("customer.notificationsClearFailed")),
+    onError: () => toast.error(t("customer.notificationsClearFailed")),
   });
 
   const notifications = notificationsData?.data || [];

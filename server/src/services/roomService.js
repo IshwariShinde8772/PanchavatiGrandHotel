@@ -1,7 +1,36 @@
 const { Op } = require("sequelize");
 const { Room, Booking, Offer } = require("../../models");
 const env = require("../config/env");
-const { isDateInRange } = require("../utils/dateHelpers");
+const {
+  diffNights,
+  getBusinessDate,
+  isDateInRange,
+  parseDateInput,
+} = require("../utils/dateHelpers");
+const { amenityInclude } = require("./amenityService");
+
+const BLOCKING_BOOKING_STATUSES = ["reserved", "confirmed", "checked_in"];
+
+async function refreshExpiredNoShows(now = new Date()) {
+  // Loaded lazily to keep the availability and no-show services acyclic.
+  const { autoCancelOverdueBookings } = require("./reservationService");
+  return autoCancelOverdueBookings(now);
+}
+
+function toDateOnly(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addUtcDays(dateValue, days) {
+  const date = parseDateInput(dateValue);
+  if (!date) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return toDateOnly(date);
+}
+
+function roundMoney(value) {
+  return Number(Number(value || 0).toFixed(2));
+}
 
 function getPublicBackendUrl() {
   return String(env.backendUrl || "")
@@ -57,12 +86,37 @@ function resolveRoomAssetUrl(value) {
   return normalized;
 }
 
-function normalizeRoomRecord(room) {
+function normalizeRoomRecord(room, options = {}) {
   const plain = typeof room?.get === "function" ? room.get({ plain: true }) : { ...room };
+  const hasAmenityRecords = Object.prototype.hasOwnProperty.call(plain, "amenityRecords");
+  const amenityDetails = hasAmenityRecords
+    ? (plain.amenityRecords || [])
+      .map((amenity) => ({
+        id: amenity.id,
+        name: amenity.name,
+        icon: amenity.icon || null,
+        category: amenity.category || "Other",
+        ...(!options.publicView ? {
+          status: amenity.status,
+          created_at: amenity.created_at,
+          updated_at: amenity.updated_at,
+        } : {}),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
+  const legacyAmenities = normalizeStringArray(plain.amenities);
+
+  delete plain.amenityRecords;
+  delete plain.seasonal_price;
+  delete plain.seasonal_start;
+  delete plain.seasonal_end;
 
   return {
     ...plain,
-    amenities: normalizeStringArray(plain.amenities),
+    amenities: hasAmenityRecords
+      ? amenityDetails.map((amenity) => amenity.name)
+      : legacyAmenities,
+    amenity_details: amenityDetails,
     images: normalizeStringArray(plain.images).map(resolveRoomAssetUrl).filter(Boolean),
   };
 }
@@ -99,11 +153,43 @@ function findBestOfferForRoom(room, offers = [], effectiveDate) {
 }
 
 async function listActiveOffers(effectiveDate) {
+  const today = getBusinessDate(new Date(), env.hotelTimeZone);
+  await Offer.update(
+    { is_active: false },
+    {
+      where: {
+        is_active: true,
+        end_date: { [Op.lt]: today },
+      },
+    }
+  );
+
+  const targetDate = effectiveDate || today;
   return Offer.findAll({
     where: {
       is_active: true,
-      start_date: { [Op.lte]: effectiveDate },
-      end_date: { [Op.gte]: effectiveDate },
+      start_date: { [Op.lte]: targetDate },
+      end_date: { [Op.gte]: targetDate },
+    },
+    order: [["discount_pct", "DESC"], ["end_date", "ASC"]],
+  });
+}
+
+async function listOffersForRange(checkIn, checkOut) {
+  const today = getBusinessDate(new Date(), env.hotelTimeZone);
+  await Offer.update(
+    { is_active: false },
+    { where: { is_active: true, end_date: { [Op.lt]: today } } }
+  );
+
+  const lastNight = addUtcDays(checkOut, -1);
+  if (!checkIn || !lastNight) return [];
+
+  return Offer.findAll({
+    where: {
+      is_active: true,
+      start_date: { [Op.lte]: lastNight },
+      end_date: { [Op.gte]: checkIn },
     },
     order: [["discount_pct", "DESC"], ["end_date", "ASC"]],
   });
@@ -111,18 +197,10 @@ async function listActiveOffers(effectiveDate) {
 
 function calculateEffectivePrice(room, checkIn, offers = []) {
   const basePrice = Number(room.base_price);
-  const seasonalPrice = room.seasonal_price ? Number(room.seasonal_price) : null;
-  const effectiveDate = checkIn || new Date().toISOString().slice(0, 10);
+  const effectiveDate = checkIn || getBusinessDate(new Date(), env.hotelTimeZone);
   const offer = findBestOfferForRoom(room, offers, effectiveDate);
   const roomDiscountPct = room.discount_pct ? Number(room.discount_pct) : null;
   const discountPct = offer?.discount_pct || roomDiscountPct;
-
-  const hasSeasonalPrice = Boolean(
-    seasonalPrice
-    && room.seasonal_start
-    && room.seasonal_end
-    && isDateInRange(effectiveDate, room.seasonal_start, room.seasonal_end)
-  );
 
   const hasDiscount = Boolean(
     discountPct
@@ -142,9 +220,7 @@ function calculateEffectivePrice(room, checkIn, offers = []) {
 
   const finalPrice = hasDiscount
     ? discountedPrice
-    : hasSeasonalPrice
-      ? seasonalPrice
-      : basePrice;
+    : basePrice;
 
   const discountAmount = hasDiscount
     ? Number((basePrice - discountedPrice).toFixed(2))
@@ -152,15 +228,57 @@ function calculateEffectivePrice(room, checkIn, offers = []) {
 
   return {
     basePrice,
-    seasonalPrice: hasSeasonalPrice ? seasonalPrice : null,
+    seasonalPrice: null,
     pricePerNight: finalPrice,
     finalPrice,
-    priceType: offer ? "offer" : hasDiscount ? "discounted" : hasSeasonalPrice ? "seasonal" : "base",
+    priceType: offer ? "offer" : hasDiscount ? "discounted" : "base",
     discountPct: hasDiscount ? discountPct : 0,
     discountAmount,
     hasDiscount,
     offer: hasDiscount && offer ? offer : null,
     savings: Number(Math.max(basePrice - finalPrice, 0).toFixed(2)),
+  };
+}
+
+async function calculateStayPricing(room, checkIn, checkOut) {
+  const nights = diffNights(checkIn, checkOut);
+  if (!Number.isInteger(nights) || nights < 1) {
+    const error = new Error("Check-out must be after check-in");
+    error.status = 400;
+    throw error;
+  }
+
+  const offers = await listOffersForRange(checkIn, checkOut);
+  const nightlyRates = Array.from({ length: nights }, (_, index) => {
+    const date = addUtcDays(checkIn, index);
+    const pricing = calculateEffectivePrice(room, date, offers);
+    return {
+      date,
+      basePrice: pricing.basePrice,
+      price: pricing.pricePerNight,
+      priceType: pricing.offer ? "offer" : "standard",
+      discountPct: pricing.discountPct,
+      discountAmount: pricing.discountAmount,
+      offer: pricing.offer,
+    };
+  });
+
+  const baseAmount = roundMoney(nightlyRates.reduce((sum, item) => sum + item.basePrice, 0));
+  const totalFare = roundMoney(nightlyRates.reduce((sum, item) => sum + item.price, 0));
+  const discountAmount = roundMoney(nightlyRates.reduce((sum, item) => sum + item.discountAmount, 0));
+  const uniqueOffers = nightlyRates
+    .map((item) => item.offer)
+    .filter((offer, index, items) => offer && items.findIndex((candidate) => candidate?.id === offer.id) === index);
+
+  return {
+    nights,
+    nightlyRates,
+    baseAmount,
+    discountAmount,
+    totalFare,
+    averagePricePerNight: roundMoney(totalFare / nights),
+    offer: uniqueOffers.length === 1 ? uniqueOffers[0] : null,
+    offers: uniqueOffers,
   };
 }
 
@@ -172,7 +290,7 @@ async function countOverlappingBookings({ roomId, checkIn, checkOut, excludeBook
   const where = {
     room_id: roomId,
     status: {
-      [Op.in]: ["confirmed", "checked_in"],
+      [Op.in]: BLOCKING_BOOKING_STATUSES,
     },
     check_out: { [Op.gt]: checkIn },
     check_in: { [Op.lt]: checkOut },
@@ -207,15 +325,70 @@ async function getAvailabilityForRoom(room, checkIn, checkOut) {
   return {
     overlapCount,
     availableCount,
-    available: availableCount > 0 && room.is_active,
+    available: availableCount > 0 && room.is_active && room.status === "available",
   };
 }
 
+async function getAvailabilityCalendar(room, startDate, days = 30) {
+  const normalizedStart = parseDateInput(startDate)
+    ? toDateOnly(parseDateInput(startDate))
+    : getBusinessDate(new Date(), env.hotelTimeZone);
+  const safeDays = Math.min(Math.max(Number(days) || 30, 1), 90);
+  const endDate = addUtcDays(normalizedStart, safeDays);
+
+  const [bookings, offers] = await Promise.all([
+    Booking.findAll({
+      where: {
+        room_id: room.id,
+        status: { [Op.in]: BLOCKING_BOOKING_STATUSES },
+        check_out: { [Op.gt]: normalizedStart },
+        check_in: { [Op.lt]: endDate },
+      },
+      attributes: ["id", "check_in", "check_out", "status"],
+      order: [["check_in", "ASC"]],
+    }),
+    listOffersForRange(normalizedStart, endDate),
+  ]);
+
+  return Array.from({ length: safeDays }, (_, index) => {
+    const date = addUtcDays(normalizedStart, index);
+    const occupiedUnits = bookings.filter((booking) => (
+      String(booking.check_in) <= date && String(booking.check_out) > date
+    )).length;
+    const occupied = occupiedUnits >= Number(room.total_units || 1);
+    const pricing = calculateEffectivePrice(room, date, offers);
+
+    const operationalStatus = room.status === "maintenance"
+      ? "maintenance"
+      : occupied
+        ? "occupied"
+        : room.status === "cleaning"
+          ? "cleaning"
+          : room.status === "occupied"
+            ? "occupied"
+            : "available";
+
+    return {
+      date,
+      available: operationalStatus === "available" && room.is_active,
+      status: operationalStatus,
+      availableCount: Math.max(Number(room.total_units || 1) - occupiedUnits, 0),
+      rateType: pricing.offer ? "offer" : "standard",
+      price: pricing.pricePerNight,
+      basePrice: pricing.basePrice,
+      discountPct: pricing.discountPct,
+      offer: pricing.offer,
+    };
+  });
+}
+
 async function listRoomsWithAvailability(filters) {
-  const effectiveDate = filters.checkIn || new Date().toISOString().slice(0, 10);
+  await refreshExpiredNoShows();
+  const effectiveDate = filters.checkIn || getBusinessDate(new Date(), env.hotelTimeZone);
   const activeOffers = await listActiveOffers(effectiveDate);
   const rooms = await Room.findAll({
     where: { is_active: true },
+    include: [amenityInclude({ activeOnly: true })],
     order: [["base_price", "ASC"]],
   });
 
@@ -230,7 +403,7 @@ async function listRoomsWithAvailability(filters) {
     rooms.map(async (room) => {
       const price = calculateEffectivePrice(room, filters.checkIn, activeOffers);
       const availability = await getAvailabilityForRoom(room, filters.checkIn, filters.checkOut);
-      const normalizedRoom = normalizeRoomRecord(room);
+      const normalizedRoom = normalizeRoomRecord(room, { publicView: true });
 
       return {
         ...normalizedRoom,
@@ -239,7 +412,7 @@ async function listRoomsWithAvailability(filters) {
         urgencyLabel: availability.availableCount > 0 && availability.availableCount <= 3
           ? `Only ${availability.availableCount} rooms left!`
           : null,
-        instantConfirmation: room.status !== "maintenance",
+        instantConfirmation: room.status === "available",
       };
     })
   );
@@ -275,10 +448,14 @@ async function listRoomsWithAvailability(filters) {
 
 module.exports = {
   calculateEffectivePrice,
+  calculateStayPricing,
   countOverlappingBookings,
   findBestOfferForRoom,
+  getAvailabilityCalendar,
   getAvailabilityForRoom,
   listActiveOffers,
+  listOffersForRange,
   listRoomsWithAvailability,
   normalizeRoomRecord,
+  refreshExpiredNoShows,
 };

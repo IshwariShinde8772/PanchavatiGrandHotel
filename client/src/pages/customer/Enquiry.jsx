@@ -46,7 +46,7 @@ export default function Enquiry() {
       setTimeout(() => setShowForm(true), 2000);
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || t("customer.enquiryFailed"));
+      toast.error(t("customer.enquiryFailed"));
     },
   });
 
@@ -99,10 +99,9 @@ export default function Enquiry() {
               onChange={(e) => handleChange("room_category", e.target.value)}
               options={[
                 { label: t("customer.any"), value: "" },
-                { label: t("room.economy"), value: "Economy" },
                 { label: t("room.standard"), value: "Standard" },
                 { label: t("room.deluxe"), value: "Deluxe" },
-                { label: t("room.suite"), value: "Suite" },
+                { label: "Regular", value: "Regular" },
               ]}
             />
             <InputField label={t("customer.checkInDate")} type="date" value={form.check_in} onChange={(e) => handleChange("check_in", e.target.value)} />

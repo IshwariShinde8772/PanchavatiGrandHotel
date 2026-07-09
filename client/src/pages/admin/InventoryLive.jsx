@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
@@ -27,6 +28,7 @@ const EMPTY_FORM = {
 };
 
 export default function InventoryLive() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -45,31 +47,31 @@ export default function InventoryLive() {
     mutationFn: inventoryAPI.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-inventory"] });
-      toast.success("Inventory item created");
+      toast.success(t("ops.created"));
       setModalOpen(false);
       setForm(EMPTY_FORM);
     },
-    onError: (error) => toast.error(error.response?.data?.error || "Failed to create inventory item"),
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, payload }) => inventoryAPI.update(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-inventory"] });
-      toast.success("Inventory item updated");
+      toast.success(t("ops.updated"));
       setModalOpen(false);
       setForm(EMPTY_FORM);
     },
-    onError: (error) => toast.error(error.response?.data?.error || "Failed to update inventory item"),
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: inventoryAPI.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-inventory"] });
-      toast.success("Inventory item deleted");
+      toast.success(t("ops.deleted"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || "Failed to delete inventory item"),
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
   const openAdd = () => {
@@ -94,7 +96,7 @@ export default function InventoryLive() {
 
   const handleSave = () => {
     if (!form.item_name.trim()) {
-      toast.error("Item name is required");
+      toast.error(t("shared.required"));
       return;
     }
 
@@ -125,10 +127,10 @@ export default function InventoryLive() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Inventory"
-        title="Track hotel stock and reorder alerts"
-        description="Monitor linen, toiletries, food, beverage, and maintenance supplies."
-        actions={<Button onClick={openAdd}>Add Item</Button>}
+        eyebrow={t("layout.inventory")}
+        title={t("ops.inventoryTitle")}
+        description={t("ops.inventoryDescription")}
+        actions={<Button onClick={openAdd}>{t("ops.addItem")}</Button>}
       />
 
       {lowStock.length ? (
@@ -155,7 +157,7 @@ export default function InventoryLive() {
       </div>
 
       {isLoading ? (
-        <p className="p-6 text-mutedText">Loading inventory...</p>
+        <p className="p-6 text-mutedText">{t("ops.loadingInventoryItems")}</p>
       ) : (
         <div className="section-card divide-y divide-divider overflow-hidden">
           {items.map((item) => {
@@ -174,72 +176,72 @@ export default function InventoryLive() {
                 <span className={`inline-flex w-fit rounded-full px-3 py-1 text-xs font-bold ${
                   isLow ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"
                 }`}>
-                  {isLow ? "Low Stock" : "Healthy"}
+                  {isLow ? t("ops.lowStock") : t("ops.healthyStock")}
                 </span>
                 <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => openEdit(item)}>Edit</Button>
+                  <Button variant="outline" onClick={() => openEdit(item)}>{t("shared.edit")}</Button>
                   <Button style={{ backgroundColor: "#DC2626", color: "white" }} onClick={() => handleDelete(item.id)}>
-                    Delete
+                    {t("common.delete")}
                   </Button>
                 </div>
               </div>
             );
           })}
-          {items.length === 0 ? <p className="p-6 text-center text-mutedText">No inventory items found.</p> : null}
+          {items.length === 0 ? <p className="p-6 text-center text-mutedText">{t("ops.noInventoryItems")}</p> : null}
         </div>
       )}
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="mb-6 font-heading text-2xl">{editingItem ? "Edit Inventory Item" : "Add Inventory Item"}</h3>
+            <h3 className="mb-6 font-heading text-2xl">{editingItem ? `${t("shared.edit")} ${t("ops.inventoryItem")}` : `${t("shared.add")} ${t("ops.inventoryItem")}`}</h3>
             <div className="grid gap-5 md:grid-cols-2">
               <div className="md:col-span-2">
                 <InputField
-                  label="Item Name"
+                  label={t("ops.itemName")}
                   value={form.item_name}
                   onChange={(event) => setForm((current) => ({ ...current, item_name: event.target.value }))}
                 />
               </div>
               <SelectField
-                label="Category"
+                label={t("shared.category")}
                 value={form.category}
                 onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
                 options={CATEGORIES}
               />
               <InputField
-                label="Unit"
+                label={t("ops.unit")}
                 value={form.unit}
                 onChange={(event) => setForm((current) => ({ ...current, unit: event.target.value }))}
               />
               <InputField
-                label="Quantity"
+                label={t("ops.quantity")}
                 type="number"
                 value={form.quantity}
                 onChange={(event) => setForm((current) => ({ ...current, quantity: event.target.value }))}
               />
               <InputField
-                label="Reorder Level"
+                label={t("ops.reorderLevel")}
                 type="number"
                 value={form.reorder_level}
                 onChange={(event) => setForm((current) => ({ ...current, reorder_level: event.target.value }))}
               />
               <InputField
-                label="Supplier"
+                label={t("ops.supplier")}
                 value={form.supplier}
                 onChange={(event) => setForm((current) => ({ ...current, supplier: event.target.value }))}
               />
               <InputField
-                label="Cost Per Unit"
+                label={t("ops.costPerUnit")}
                 type="number"
                 value={form.cost_per_unit}
                 onChange={(event) => setForm((current) => ({ ...current, cost_per_unit: event.target.value }))}
               />
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setModalOpen(false)}>{t("common.cancel")}</Button>
               <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
-                {createMutation.isPending || updateMutation.isPending ? "Saving..." : "Save"}
+                {createMutation.isPending || updateMutation.isPending ? t("common.saving") : t("common.saveChanges")}
               </Button>
             </div>
           </div>

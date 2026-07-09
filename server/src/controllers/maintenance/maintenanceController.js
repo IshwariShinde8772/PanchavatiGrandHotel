@@ -1,4 +1,5 @@
-const { MaintenanceLog, Room, Staff } = require("../../../models");
+const { Op } = require("sequelize");
+const { Booking, MaintenanceLog, Room, Staff, Task } = require("../../../models");
 const { buildMaintenancePayload, serializeMaintenanceLog, STATUS_MAP, PRIORITY_MAP } = require("../../services/maintenanceService");
 
 const maintenanceInclude = [
@@ -37,6 +38,12 @@ async function createMaintenanceLog(req, res) {
     defaultStatus: "open",
   });
   const item = await MaintenanceLog.create(payload);
+  if (payload.room_id) {
+    await Room.update(
+      { status: "maintenance" },
+      { where: { id: payload.room_id } }
+    );
+  }
   const created = await MaintenanceLog.findByPk(item.id, { include: maintenanceInclude });
 
   return res.status(201).json({
@@ -57,6 +64,12 @@ async function assignMaintenance(req, res) {
     assigned_to_staff_id: payload.assigned_to_staff_id,
     status: "in_progress",
   });
+  if (item.room_id) {
+    await Room.update(
+      { status: "maintenance" },
+      { where: { id: item.room_id } }
+    );
+  }
   const updated = await MaintenanceLog.findByPk(item.id, { include: maintenanceInclude });
 
   return res.json({
@@ -77,6 +90,41 @@ async function resolveMaintenance(req, res) {
     resolution_note: req.body.resolution_note || req.body.resolutionNote || req.body.notes || null,
     resolved_at: new Date(),
   });
+
+  if (item.room_id) {
+    const [remainingMaintenance, activeCheckedIn, pendingCleaning] = await Promise.all([
+      MaintenanceLog.count({
+        where: {
+          room_id: item.room_id,
+          id: { [Op.ne]: item.id },
+          status: { [Op.ne]: "resolved" },
+        },
+      }),
+      Booking.count({
+        where: { room_id: item.room_id, status: "checked_in" },
+      }),
+      Task.count({
+        where: {
+          room_id: item.room_id,
+          task_type: "cleaning",
+          status: { [Op.in]: ["pending", "in_progress"] },
+        },
+      }),
+    ]);
+
+    const nextRoomStatus = remainingMaintenance > 0
+      ? "maintenance"
+      : activeCheckedIn > 0
+        ? "occupied"
+        : pendingCleaning > 0
+          ? "cleaning"
+          : "available";
+    await Room.update(
+      { status: nextRoomStatus },
+      { where: { id: item.room_id } }
+    );
+  }
+
   const updated = await MaintenanceLog.findByPk(item.id, { include: maintenanceInclude });
 
   return res.json({

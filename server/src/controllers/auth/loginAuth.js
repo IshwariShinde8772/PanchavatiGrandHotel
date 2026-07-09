@@ -2,6 +2,7 @@ const bcrypt = require("bcryptjs");
 const { Admin, Customer, Staff } = require("../../../models");
 const { sanitizeUser } = require("../../utils/serializers");
 const { signToken } = require("../../utils/token");
+const { writeAudit } = require("../../services/auditService");
 
 const portalStaffRoles = new Set(["receptionist", "manager", "housekeeping", "kitchen", "server"]);
 
@@ -29,6 +30,14 @@ async function login(req, res) {
 
   const admin = await Admin.findOne({ where: { email } });
   if (admin && await bcrypt.compare(password, admin.password_hash)) {
+    await writeAudit({
+      action: "email_login_succeeded",
+      entityType: "auth",
+      entityId: admin.id,
+      actor: { id: admin.id, role: "admin" },
+      module: "auth",
+      message: "Admin signed in with email",
+    });
     return res.json({
       success: true,
       data: buildAuthResponse(admin, "admin"),
@@ -44,6 +53,15 @@ async function login(req, res) {
       });
     }
 
+    await writeAudit({
+      action: "email_login_succeeded",
+      entityType: "auth",
+      entityId: staff.id,
+      actor: { id: staff.id, role: staff.role },
+      module: "auth",
+      message: "Staff member signed in with email",
+    });
+
     return res.json({
       success: true,
       data: buildAuthResponse(staff, staff.role),
@@ -58,11 +76,29 @@ async function login(req, res) {
   });
 
   if (customer?.password_hash && await bcrypt.compare(password, customer.password_hash)) {
+    await writeAudit({
+      action: "email_login_succeeded",
+      entityType: "auth",
+      entityId: customer.id,
+      actor: { id: customer.id, role: "customer" },
+      module: "auth",
+      message: "Customer signed in with email",
+    });
     return res.json({
       success: true,
       data: buildAuthResponse(customer, "customer"),
     });
   }
+
+  await writeAudit({
+    action: "email_login_failed",
+    entityType: "auth",
+    actor: { role: "system" },
+    level: "warning",
+    module: "auth",
+    message: "Email login failed",
+    metadata: { loginMethod: "email" },
+  });
 
   return res.status(401).json({
     success: false,

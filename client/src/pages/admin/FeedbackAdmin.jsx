@@ -1,133 +1,193 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
+import InputField from "../../components/forms/InputField";
+import SelectField from "../../components/forms/SelectField";
+import StarRating from "../../components/forms/StarRating";
+import Button from "../../components/common/Button";
 import { feedbackAPI } from "../../api/feedbackAPI";
+import { useDebounce } from "../../hooks/useDebounce";
+import { formatBookedDate, formatISTDateTimeForReport } from "../../utils/hotelDate";
 
-function StarRating({ rating }) {
-  return (
-    <span style={{ color: "#F59E0B", fontSize: 16, letterSpacing: 1 }}>
-      {"★".repeat(Math.round(rating || 0))}{"☆".repeat(5 - Math.round(rating || 0))}
-    </span>
-  );
+function formatDateTime(value) {
+  return formatISTDateTimeForReport(value);
 }
 
-function StatusBadge({ status }) {
-  const styles = {
-    pending: { bg: "#FEF3C7", color: "#92400E" },
-    published: { bg: "#DCFCE7", color: "#166534" },
-    rejected: { bg: "#FEE2E2", color: "#991B1B" },
+function StatusBadge({ status, t }) {
+  const tones = {
+    pending: "bg-amber-50 text-amber-700",
+    published: "bg-green-50 text-green-700",
+    rejected: "bg-red-50 text-red-700",
   };
-  const s = styles[status] || styles.pending;
   return (
-    <span style={{ padding: "3px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: s.bg, color: s.color }}>
-      {status}
+    <span className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${tones[status] || tones.pending}`}>
+      {t(`statuses.feedback.${status}`, { defaultValue: status })}
     </span>
   );
 }
 
 export default function FeedbackAdmin() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const [filters, setFilters] = useState({ q: "", source: "" });
+  const debouncedSearch = useDebounce(filters.q, 300);
 
   const { data: res, isLoading } = useQuery({
-    queryKey: ["admin-feedbacks"],
-    queryFn: () => feedbackAPI.adminList(),
+    queryKey: ["admin-feedbacks", debouncedSearch, filters.source],
+    queryFn: () => feedbackAPI.adminList({
+      q: debouncedSearch || undefined,
+      source: filters.source || undefined,
+    }),
   });
 
   const feedbacks = res?.data || [];
 
   const moderateMutation = useMutation({
     mutationFn: ({ id, payload }) => feedbackAPI.moderate(id, payload),
-    onSuccess: () => { queryClient.invalidateQueries(["admin-feedbacks"]); toast.success("Feedback updated"); },
-    onError: (e) => toast.error(e.response?.data?.error || "Action failed"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-feedbacks"] });
+      toast.success(t("ops.updated"));
+    },
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
   const deleteMutation = useMutation({
     mutationFn: feedbackAPI.delete,
-    onSuccess: () => { queryClient.invalidateQueries(["admin-feedbacks"]); toast.success("Feedback deleted"); },
-    onError: (e) => toast.error(e.response?.data?.error || "Failed to delete"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-feedbacks"] });
+      toast.success(t("ops.deleted"));
+    },
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
-  const handleApprove = (id) => moderateMutation.mutate({ id, payload: { status: "published" } });
-  const handleReject = (id) => moderateMutation.mutate({ id, payload: { status: "rejected" } });
-  const handleDelete = (id) => { if (window.confirm("Delete this feedback?")) deleteMutation.mutate(id); };
+  const handleDelete = (id) => {
+    if (window.confirm(t("ops.deleteFeedback"))) {
+      deleteMutation.mutate(id);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Feedback Management"
-        title="Review moderation and publishing"
-        description="Approve or reject guest reviews before they appear on public testimonials."
+        eyebrow={t("ops.feedbackManagement")}
+        title={t("admin.feedbackTitle")}
+        description={t("ops.feedbackDescription")}
       />
 
-      {isLoading ? (
-        <p style={{ color: "#6B7280", padding: 20 }}>Loading feedback…</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {feedbacks.map((item) => (
-            <div
-              key={item.id}
-              style={{
-                background: "white",
-                borderRadius: 14,
-                padding: "18px 22px",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
-                border: item.status === "published" ? "1.5px solid #BBF7D0" : "1.5px solid #E5E7EB",
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 16,
-              }}
-            >
-              {/* Left */}
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, flexWrap: "wrap" }}>
-                  <p style={{ fontWeight: 700, fontSize: 15 }}>{item.cust_name || "Guest"}</p>
-                  <StarRating rating={item.rating} />
-                  <StatusBadge status={item.status} />
-                </div>
-                {item.title && <p style={{ fontWeight: 600, fontSize: 14, marginBottom: 3 }}>{item.title}</p>}
-                <p style={{ fontSize: 14, color: "#374151", marginBottom: 4 }}>{item.comment}</p>
-                {item.room_category && (
-                  <p style={{ fontSize: 12, color: "#6B7280" }}>Category: {item.room_category}</p>
-                )}
-                <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>
-                  {item.created_at ? new Date(item.created_at).toLocaleDateString("en-IN") : ""}
-                </p>
-              </div>
+      <div className="section-card grid gap-4 p-5 md:grid-cols-2">
+        <InputField
+          label={t("ops.searchFeedback")}
+          value={filters.q}
+          onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))}
+          placeholder={t("shared.search")}
+        />
+        <SelectField
+          label={t("ops.feedbackSource")}
+          value={filters.source}
+          onChange={(event) => setFilters((current) => ({ ...current, source: event.target.value }))}
+          options={[
+            { label: t("ops.allFeedback"), value: "" },
+            { label: t("ops.checkoutFeedback"), value: "receptionist_checkout" },
+            { label: t("ops.customerSubmitted"), value: "customer" },
+          ]}
+        />
+      </div>
 
-              {/* Actions */}
-              <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap", alignItems: "flex-start" }}>
-                {item.status !== "published" && (
-                  <button
-                    onClick={() => handleApprove(item.id)}
-                    style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#16A34A", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                  >
-                    ✓ Approve
-                  </button>
-                )}
-                {item.status !== "rejected" && (
-                  <button
-                    onClick={() => handleReject(item.id)}
-                    style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: "#EF4444", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                  >
-                    ✕ Reject
-                  </button>
-                )}
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  style={{ padding: "7px 14px", borderRadius: 8, border: "1.5px solid #DC2626", background: "white", color: "#DC2626", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                >
-                  🗑
-                </button>
-              </div>
-            </div>
-          ))}
-          {feedbacks.length === 0 && (
-            <div style={{ textAlign: "center", padding: 48, color: "#9CA3AF" }}>
-              <p style={{ fontSize: 18, fontWeight: 600 }}>No feedback yet</p>
-              <p style={{ fontSize: 14, marginTop: 4 }}>Guest reviews will appear here for moderation.</p>
-            </div>
-          )}
+      {isLoading ? (
+        <p className="p-5 text-sm text-mutedText">{t("ops.loadingFeedback")}</p>
+      ) : feedbacks.length === 0 ? (
+        <div className="section-card p-12 text-center text-mutedText">
+          <p className="text-lg font-semibold">{t("ops.noCheckoutFeedback")}</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {feedbacks.map((item) => {
+            const booking = item.booking;
+            const room = booking?.room;
+            const receptionistName = item.collected_by_receptionist_name
+              || item.collectedByReceptionist?.full_name;
+            const isCheckoutFeedback = item.source === "receptionist_checkout";
+
+            return (
+              <article key={item.id} className="section-card space-y-4 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="font-semibold">{item.cust_name || t("ops.guest")}</h3>
+                      <StarRating value={Number(item.rating || 0)} readOnly />
+                      <StatusBadge status={item.status} t={t} />
+                      <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                        {isCheckoutFeedback ? t("ops.receptionCheckout") : t("ops.customerSubmitted")}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-darkText">{item.comment}</p>
+                    {item.internal_note ? (
+                      <p className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+                        <strong>{t("ops.internalNote")}:</strong> {item.internal_note}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {item.status !== "published" ? (
+                      <Button
+                        onClick={() => moderateMutation.mutate({ id: item.id, payload: { status: "published" } })}
+                        disabled={moderateMutation.isPending}
+                      >
+                        {t("shared.approve")}
+                      </Button>
+                    ) : null}
+                    {item.status !== "rejected" ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => moderateMutation.mutate({ id: item.id, payload: { status: "rejected" } })}
+                        disabled={moderateMutation.isPending}
+                      >
+                        {t("shared.reject")}
+                      </Button>
+                    ) : null}
+                    <Button variant="outline" onClick={() => handleDelete(item.id)} disabled={deleteMutation.isPending}>
+                      {t("common.delete")}
+                    </Button>
+                  </div>
+                </div>
+
+                <dl className="grid gap-3 rounded-xl bg-gray-50 p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <dt className="text-mutedText">{t("shared.bookingId")}</dt>
+                    <dd className="font-semibold">{booking?.booking_ref || (item.booking_id ? `#${item.booking_id}` : t("shared.notAvailable"))}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-mutedText">{t("ops.room")}</dt>
+                    <dd className="font-semibold">
+                      {item.room_number || room?.room_number || "N/A"}
+                      {(item.room_name || room?.name || item.room_category || room?.category)
+                        ? ` - ${item.room_name || room?.name || item.room_category || room?.category}`
+                        : ""}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-mutedText">{t("customer.checkIn")}</dt>
+                    <dd className="font-semibold">{formatBookedDate(item.check_in_date || booking?.check_in)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-mutedText">{t("customer.checkOut")}</dt>
+                    <dd className="font-semibold">{formatBookedDate(item.check_out_date || booking?.check_out)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-mutedText">{t("ops.collectedBy")}</dt>
+                    <dd className="font-semibold">{receptionistName || (isCheckoutFeedback ? t("layout.receptionTitle") : t("shared.customer"))}</dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-mutedText">{t("ops.collectedAt")}</dt>
+                    <dd className="font-semibold">{formatDateTime(item.collected_at || item.created_at)}</dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

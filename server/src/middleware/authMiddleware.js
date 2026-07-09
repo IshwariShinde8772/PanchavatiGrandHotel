@@ -2,8 +2,6 @@ const jwt = require("jsonwebtoken");
 const env = require("../config/env");
 
 function authMiddleware(req, res, next) {
-  console.log("Authorization Header:", req.headers.authorization);
-
   const authHeader = typeof req.headers.authorization === "string"
     ? req.headers.authorization.trim()
     : "";

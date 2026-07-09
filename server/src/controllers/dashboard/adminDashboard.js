@@ -19,7 +19,7 @@ async function getAdminDashboard(req, res) {
   const report = reportData.summary;
   const revenueSeries = reportData.revenueSeries;
 
-  const [activeStaff, openMaintenance, newEnquiries, inventory, rooms, recentBookings, pendingFeedback] = await Promise.all([
+  const [activeStaff, openMaintenance, newEnquiries, inventory, rooms, recentBookings, pendingFeedback, manualBookings, onlineBookings] = await Promise.all([
     Staff.count({ where: { is_active: true } }),
     MaintenanceLog.count({ where: { status: { [Op.ne]: "resolved" } } }),
     Enquiry.count({ where: { created_at: { [Op.gte]: monthStart } } }),
@@ -27,6 +27,8 @@ async function getAdminDashboard(req, res) {
     Room.findAll(),
     Booking.findAll({ order: [["created_at", "DESC"]], limit: 10 }),
     Feedback.count({ where: { status: "pending" } }),
+    Booking.count({ where: { booking_type: "manual", created_at: { [Op.gte]: monthStart } } }),
+    Booking.count({ where: { booking_type: "online", created_at: { [Op.gte]: monthStart } } }),
   ]);
 
   const lowStockItems = inventory.filter((item) => item.quantity <= item.reorder_level);
@@ -49,6 +51,7 @@ async function getAdminDashboard(req, res) {
       revenueSeries,
       occupancy: reportData.occupancy || occupancy,
       recentBookings,
+      bookingMix: { manual: manualBookings, online: onlineBookings, total: manualBookings + onlineBookings },
       alerts: {
         low_inventory: lowStockItems,
         open_maintenance: openMaintenance,

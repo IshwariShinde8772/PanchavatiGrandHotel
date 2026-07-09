@@ -1,6 +1,8 @@
-const labels = ["Stay Details", "Guest Info", "ID & Nationality", "Payment"];
+import { useTranslation } from "react-i18next";
 
 export default function BookingStepIndicator({ currentStep = 0 }) {
+  const { t } = useTranslation();
+  const labels = [t("bookingUi.stayDetails"), t("bookingUi.guestInfo"), t("bookingUi.idNationality"), t("common.payment")];
   return (
     <div className="grid grid-cols-4 gap-2">
       {labels.map((label, index) => (

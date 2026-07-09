@@ -30,7 +30,10 @@ function verifySignature({ orderId, paymentId, signature }) {
     .update(`${orderId}|${paymentId}`)
     .digest("hex");
 
-  return generated === signature;
+  const generatedBuffer = Buffer.from(generated, "utf8");
+  const signatureBuffer = Buffer.from(String(signature), "utf8");
+  return generatedBuffer.length === signatureBuffer.length
+    && crypto.timingSafeEqual(generatedBuffer, signatureBuffer);
 }
 
 async function refundPayment(paymentId, amount) {
@@ -41,9 +44,19 @@ async function refundPayment(paymentId, amount) {
   return razorpay.payments.refund(paymentId, { amount });
 }
 
+async function fetchPayment(paymentId) {
+  if (!razorpay) {
+    const error = new Error("Razorpay is not configured");
+    error.status = 503;
+    throw error;
+  }
+  return razorpay.payments.fetch(paymentId);
+}
+
 module.exports = {
   createOrder,
   verifySignature,
   refundPayment,
+  fetchPayment,
 };
 

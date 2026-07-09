@@ -1,4 +1,19 @@
-function errorHandler(error, req, res, next) {
+const { writeAudit } = require("../services/auditService");
+
+function moduleFromPath(path) {
+  const value = String(path || "").toLocaleLowerCase();
+  if (value.includes("auth")) return "auth";
+  if (value.includes("booking")) return "booking";
+  if (value.includes("payment") || value.includes("transaction")) return "payment";
+  if (value.includes("refund")) return "refund";
+  if (value.includes("room")) return "rooms";
+  if (value.includes("offer")) return "offers";
+  if (value.includes("coupon")) return "coupon";
+  if (value.includes("feedback")) return "feedback";
+  return "system";
+}
+
+async function errorHandler(error, req, res, next) {
   if (res.headersSent) {
     return next(error);
   }
@@ -34,6 +49,19 @@ function errorHandler(error, req, res, next) {
           }))
         : null,
       stack: error?.stack || null,
+    });
+    await writeAudit({
+      action: "runtime_error",
+      entityType: "system_error",
+      actor: req.user,
+      level: "error",
+      module: moduleFromPath(req.originalUrl),
+      message,
+      metadata: {
+        method: req.method,
+        path: req.originalUrl,
+        status,
+      },
     });
   }
 

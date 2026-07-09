@@ -7,7 +7,7 @@ module.exports = (sequelize) => sequelize.define(
     room_number: { type: DataTypes.STRING, allowNull: false, unique: true },
     name: { type: DataTypes.STRING, allowNull: false },
     category: {
-      type: DataTypes.ENUM("Standard", "Deluxe", "Suite", "Family", "Presidential"),
+      type: DataTypes.ENUM("Standard", "Deluxe", "Regular"),
       allowNull: false,
     },
     description: { type: DataTypes.TEXT, allowNull: false },

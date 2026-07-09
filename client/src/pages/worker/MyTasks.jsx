@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
@@ -19,6 +20,7 @@ function formatLabel(value) {
 }
 
 export default function MyTasks() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [noteDrafts, setNoteDrafts] = useState({});
 
@@ -33,10 +35,10 @@ export default function MyTasks() {
     mutationFn: ({ id, payload }) => workerAPI.updateMyTaskStatus(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["worker-my-tasks"] });
-      toast.success("Task updated successfully");
+      toast.success(t("ops.updated"));
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || "Failed to update task");
+      toast.error(t("shared.actionFailed"));
     },
   });
 
@@ -62,15 +64,15 @@ export default function MyTasks() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="My Tasks Today"
-        title="Assigned work and turnaround list"
-        description="Track what needs attention now and update status as you move through the day."
+        eyebrow={t("ops.myTasksToday")}
+        title={t("ops.assignedWork")}
+        description={t("ops.assignedWorkDescription")}
       />
 
       {isLoading ? (
-        <div className="section-card p-5 text-sm text-mutedText">Loading your tasks...</div>
+        <div className="section-card p-5 text-sm text-mutedText">{t("ops.loadingTasks")}</div>
       ) : tasks.length === 0 ? (
-        <div className="section-card p-5 text-sm text-mutedText">No tasks assigned right now.</div>
+        <div className="section-card p-5 text-sm text-mutedText">{t("ops.noTasks")}</div>
       ) : (
         <div className="space-y-4">
           {tasks.map((task) => {
@@ -83,23 +85,23 @@ export default function MyTasks() {
                   <div>
                     <p className="font-semibold">{task.title}</p>
                     <p className="text-sm text-mutedText">
-                      Room: {task.room_number || "N/A"} • Type: {formatLabel(task.task_type)} • Priority: {formatLabel(task.priority)}
+                      {t("ops.room")}: {task.room_number || t("shared.notAvailable")} • {t("ops.taskType")}: {formatLabel(task.task_type)} • {t("ops.priority")}: {formatLabel(task.priority)}
                     </p>
                     <p className="text-sm text-mutedText">
-                      Status: <span className="font-semibold">{formatLabel(task.status)}</span>
-                      {task.due_time ? ` • Due: ${new Date(task.due_time).toLocaleString()}` : ""}
+                      {t("common.status")}: <span className="font-semibold">{formatLabel(task.status)}</span>
+                      {task.due_time ? ` • ${t("ops.due")}: ${new Date(task.due_time).toLocaleString()}` : ""}
                     </p>
                   </div>
                 </div>
 
                 <InputField
-                  label="Notes"
+                  label={t("shared.notes")}
                   value={notesValue}
                   onChange={(event) => setNoteDrafts((current) => ({
                     ...current,
                     [task.id]: event.target.value,
                   }))}
-                  placeholder="Add handling notes (optional)"
+                  placeholder={`${t("shared.notes")} (${t("shared.optional")})`}
                 />
 
                 <div className="flex flex-wrap gap-3">
@@ -108,18 +110,18 @@ export default function MyTasks() {
                     onClick={() => handleUpdateNotes(task)}
                     disabled={updateTaskMutation.isPending}
                   >
-                    Save Notes
+                    {t("ops.saveNotes")}
                   </Button>
                   {nextStatus ? (
                     <Button
                       onClick={() => handleMoveForward(task)}
                       disabled={updateTaskMutation.isPending}
                     >
-                      Move to {formatLabel(nextStatus)}
+                      {t("ops.moveTo", { status: formatLabel(nextStatus) })}
                     </Button>
                   ) : (
                     <Button variant="outline" disabled>
-                      Completed
+                      {t("ops.taskCompleted")}
                     </Button>
                   )}
                 </div>

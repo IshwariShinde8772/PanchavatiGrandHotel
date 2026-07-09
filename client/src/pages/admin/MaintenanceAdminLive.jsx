@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
@@ -21,6 +22,7 @@ const PRIORITY_STYLES = {
 };
 
 export default function MaintenanceAdminLive() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [assignmentById, setAssignmentById] = useState({});
 
@@ -38,18 +40,20 @@ export default function MaintenanceAdminLive() {
     mutationFn: ({ id, payload }) => maintenanceAPI.assign(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-maintenance"] });
-      toast.success("Issue assigned");
+      queryClient.invalidateQueries({ queryKey: ["receptionist-room-grid"] });
+      toast.success(t("shared.actionCompleted"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || "Failed to assign issue"),
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
   const resolveMutation = useMutation({
     mutationFn: ({ id, payload }) => maintenanceAPI.resolve(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-maintenance"] });
-      toast.success("Issue resolved");
+      queryClient.invalidateQueries({ queryKey: ["receptionist-room-grid"] });
+      toast.success(t("shared.actionCompleted"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || "Failed to resolve issue"),
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
   const items = maintenanceResponse?.data || [];
@@ -63,7 +67,7 @@ export default function MaintenanceAdminLive() {
   const handleAssign = (item) => {
     const assignedStaffId = assignmentById[item.id];
     if (!assignedStaffId) {
-      toast.error("Select a staff member first");
+      toast.error(t("ops.selectStaff"));
       return;
     }
 
@@ -88,20 +92,20 @@ export default function MaintenanceAdminLive() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Maintenance"
-        title="Issue tracking and assignment"
-        description="Assign repairs, track priority, and close issues with notes."
+        eyebrow={t("layout.maintenance")}
+        title={t("ops.maintenanceAdminTitle")}
+        description={t("ops.maintenanceAdminDescription")}
       />
 
       {isLoading ? (
-        <p className="p-6 text-mutedText">Loading maintenance issues...</p>
+        <p className="p-6 text-mutedText">{t("ops.loadingMaintenance")}</p>
       ) : (
         <div className="section-card divide-y divide-divider overflow-hidden">
           {items.map((item) => (
             <div key={item.id} className="grid gap-4 p-5 lg:grid-cols-[1.2fr_0.9fr_1fr_1.4fr_220px] lg:items-center">
               <div>
                 <p className="font-semibold">
-                  {item.room_number ? `Room ${item.room_number}` : "General Issue"}
+                  {item.room_number ? `${t("ops.room")} ${item.room_number}` : t("ops.generalArea")}
                 </p>
                 <p className="text-sm text-mutedText">{item.room_name || item.title}</p>
               </div>
@@ -126,23 +130,23 @@ export default function MaintenanceAdminLive() {
                 {item.status !== "resolved" ? (
                   <>
                     <SelectField
-                      label="Assign To"
+                      label={t("ops.assignTo")}
                       value={assignmentById[item.id] || String(item.assigned_to_staff_id || "")}
                       onChange={(event) => setAssignmentById((current) => ({ ...current, [item.id]: event.target.value }))}
-                      options={[{ label: "Select staff", value: "" }, ...staffOptions]}
+                      options={[{ label: t("ops.selectStaff"), value: "" }, ...staffOptions]}
                     />
                     <div className="flex gap-2">
-                      <Button variant="outline" onClick={() => handleAssign(item)}>Assign</Button>
-                      <Button onClick={() => handleResolve(item)}>Resolve</Button>
+                      <Button variant="outline" onClick={() => handleAssign(item)}>{t("ops.assign")}</Button>
+                      <Button onClick={() => handleResolve(item)}>{t("ops.resolve")}</Button>
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">Issue completed</div>
+                  <div className="rounded-2xl bg-green-50 px-4 py-3 text-sm text-green-700">{t("ops.issueCompleted")}</div>
                 )}
               </div>
             </div>
           ))}
-          {items.length === 0 ? <p className="p-6 text-center text-mutedText">No maintenance issues found.</p> : null}
+          {items.length === 0 ? <p className="p-6 text-center text-mutedText">{t("ops.noMaintenanceIssues")}</p> : null}
         </div>
       )}
     </div>

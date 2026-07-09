@@ -4,6 +4,7 @@ export const useBookingStore = create((set) => ({
   selection: {
     room: null,
     checkIn: "",
+    checkInTime: "",
     checkOut: "",
     guests: 2,
     specialRequests: "",
@@ -22,6 +23,7 @@ export const useBookingStore = create((set) => ({
       selection: {
         room: null,
         checkIn: "",
+        checkInTime: "",
         checkOut: "",
         guests: 2,
         specialRequests: "",

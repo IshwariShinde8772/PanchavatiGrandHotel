@@ -289,7 +289,7 @@ async function expireTransactionIfNeeded(transactionRecord) {
   return transactionRecord;
 }
 
-async function createQrTransaction({ PaymentTransaction, booking, customer, hotelSettings, transaction, amount, description }) {
+async function createQrTransaction({ PaymentTransaction, booking, customer, hotelSettings, transaction, amount, description, allowLocalFallback = false }) {
   if (!booking?.id) {
     throw createBadRequestError("Booking not found for QR payment");
   }
@@ -298,7 +298,13 @@ async function createQrTransaction({ PaymentTransaction, booking, customer, hote
     throw createBadRequestError("Customer not found for QR payment");
   }
 
-  ensureRazorpayQrConfig();
+  const gatewayAvailable = Boolean(
+    env.razorpay.keyId
+    && env.razorpay.keySecret
+    && razorpay?.qrCode
+    && typeof razorpay.qrCode.create === "function"
+  );
+  if (!gatewayAvailable && !allowLocalFallback) ensureRazorpayQrConfig();
 
   const selectedAmount = amount ?? booking.total_amount;
   const { amountPaise, amountRupees } = normalizeAmount(selectedAmount);
@@ -347,7 +353,7 @@ async function createQrTransaction({ PaymentTransaction, booking, customer, hote
     { label: "minimal", payload: minimalQrRequestPayload },
   ];
 
-  for (const attempt of attempts) {
+  for (const attempt of gatewayAvailable ? attempts : []) {
     try {
       qrResponse = await razorpay.qrCode.create(attempt.payload);
       break;
@@ -389,7 +395,9 @@ async function createQrTransaction({ PaymentTransaction, booking, customer, hote
         expiresAt,
         description,
         fallbackQrPayload,
-        fallbackReason: buildRazorpayFailureMessage(lastDetails),
+        fallbackReason: gatewayAvailable
+          ? buildRazorpayFailureMessage(lastDetails)
+          : "Manual hotel UPI advance payment",
       });
 
   if (!qrResponse) {

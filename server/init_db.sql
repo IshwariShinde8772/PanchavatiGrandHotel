@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS rooms (
     id INT AUTO_INCREMENT PRIMARY KEY,
     room_number VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(255) NOT NULL,
-    category ENUM('Standard', 'Deluxe', 'Suite', 'Family', 'Presidential') NOT NULL,
+    category ENUM('Standard', 'Deluxe', 'Regular') NOT NULL,
     description TEXT NOT NULL,
     base_price DECIMAL(10, 2) NOT NULL,
     seasonal_price DECIMAL(10, 2),
@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS bookings (
     customer_id INT NOT NULL,
     room_id INT NOT NULL,
     check_in DATE NOT NULL,
+    check_in_time VARCHAR(5) NOT NULL DEFAULT '14:00',
+    check_in_datetime DATETIME,
+    auto_cancel_at DATETIME,
+    no_show_grace_minutes INT NOT NULL DEFAULT 60,
     check_out DATE NOT NULL,
     guests INT DEFAULT 1,
     adults INT DEFAULT 1,
@@ -85,11 +89,30 @@ CREATE TABLE IF NOT EXISTS bookings (
     payment_status ENUM('pending', 'partial', 'paid', 'refunded') DEFAULT 'pending',
     payment_method VARCHAR(50),
     status ENUM('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled') DEFAULT 'pending',
+    cancellation_type VARCHAR(40),
+    auto_cancellation_reason TEXT,
+    auto_cancelled_at DATETIME,
+    refund_request_created_at DATETIME,
+    actual_checkin_time DATETIME,
+    actual_checkout_time DATETIME,
+    checked_in_by_staff_id INT,
+    checked_out_by_staff_id INT,
+    checked_out_by_role VARCHAR(30),
+    is_early_checkout BOOLEAN NOT NULL DEFAULT FALSE,
+    early_checkout_at DATETIME,
+    early_checkout_reason TEXT,
+    early_checkout_note TEXT,
+    original_checkout_date DATE,
+    early_checkout_refund_amount DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    early_checkout_adjustment_charge DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    early_checkout_policy_applied VARCHAR(160),
+    room_status_after_checkout VARCHAR(30),
     special_requests TEXT,
     id_verified BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id),
-    FOREIGN KEY (room_id) REFERENCES rooms(id)
+    FOREIGN KEY (room_id) REFERENCES rooms(id),
+    INDEX bookings_auto_cancel_status_idx (auto_cancel_at, status)
 ) ENGINE=InnoDB;
 
 -- 6. Bills Table
@@ -197,7 +220,8 @@ CREATE TABLE IF NOT EXISTS hotel_settings (
     check_in_time TIME DEFAULT '14:00:00',
     check_out_time TIME DEFAULT '11:00:00',
     extra_bed_charge DECIMAL(10, 2) DEFAULT 500.00,
-    cancellation_policy TEXT
+    cancellation_policy TEXT,
+    logs_enabled BOOLEAN NOT NULL DEFAULT TRUE
 ) ENGINE=InnoDB;
 
 -- 12. Saved Rooms (Wishlist)

@@ -1,61 +1,43 @@
+const { Op } = require("sequelize");
 const {
   sequelize,
   Booking,
   BookingExtensionRequest,
   Customer,
-  HotelSetting,
   Notification,
-  Room,
   PaymentTransaction,
+  Room,
 } = require("../../../models");
-const { Op } = require("sequelize");
-const { calculateGST } = require("../../utils/gst");
-const { diffNights, parseDateInput, startOfTodayUTC } = require("../../utils/dateHelpers");
-const { calculateEffectivePrice, countOverlappingBookings } = require("../../services/roomService");
+const { parseDateInput } = require("../../utils/dateHelpers");
+const { countOverlappingBookings } = require("../../services/roomService");
 const { sendEmail } = require("../../services/emailService");
-const { createQrTransaction, serializeTransaction } = require("../../services/transactionService");
-
-function buildExtensionTotals(booking, requestedFrom, requestedTo, room) {
-  const requestedNights = diffNights(requestedFrom, requestedTo);
-  const extraNights = Math.max(requestedNights - booking.nights, 0);
-  const price = calculateEffectivePrice(room, requestedFrom);
-  const extraFare = Number((price.pricePerNight * extraNights).toFixed(2));
-  const gst = calculateGST(extraFare, booking.gst_percent);
-  const extraAmount = Number((extraFare + gst.gstAmount).toFixed(2));
-
-  return {
-    nights: requestedNights,
-    extra_fare: extraFare,
-    extra_gst: gst.gstAmount,
-    extra_amount: extraAmount,
-  };
-}
-
-function formatBookingRange(booking) {
-  return `${booking.check_in} → ${booking.check_out}`;
-}
+const { writeAudit } = require("../../services/auditService");
+const {
+  applyExtensionToBooking,
+  buildExtensionRequestValues,
+  calculateExtensionAmounts,
+  extensionRemaining,
+  roundMoney,
+  toExtensionPayload,
+} = require("../../services/extensionService");
 
 async function notifyCustomer(subject, customer, html, text) {
-  if (!customer?.email) {
-    return;
+  if (customer?.email) {
+    await sendEmail({ to: customer.email, subject, html, text });
   }
-
-  await sendEmail({ to: customer.email, subject, html, text });
 }
 
-async function applyExtensionToBooking(booking, request) {
-  const newTotalFare = Number((booking.fare_per_night * request.nights).toFixed(2));
-  const gst = calculateGST(newTotalFare, booking.gst_percent);
-  const newTotalAmount = Number((newTotalFare + gst.gstAmount).toFixed(2));
-
-  await booking.update({
-    check_in: request.requested_from,
-    check_out: request.requested_to,
-    nights: request.nights,
-    total_fare: newTotalFare,
-    gst_amount: gst.gstAmount,
-    total_amount: newTotalAmount,
-  });
+function extensionAuditMetadata(request, extra = {}) {
+  const data = toExtensionPayload(request);
+  return {
+    bookingId: data.booking_id,
+    extensionRequestId: data.id,
+    oldCheckoutDate: data.originalCheckoutDate,
+    newCheckoutDate: data.extendedCheckoutDate,
+    extensionNights: data.extensionNights,
+    extensionPayableAmount: data.extensionPayableAmount,
+    ...extra,
+  };
 }
 
 async function createBookingExtensionRequest(req, res) {
@@ -66,81 +48,83 @@ async function createBookingExtensionRequest(req, res) {
   if (!booking) {
     return res.status(404).json({ success: false, error: "Booking not found" });
   }
-
   if (booking.customer_id !== req.user.id) {
     return res.status(403).json({ success: false, error: "You cannot request an extension for this booking" });
   }
-
-  if (booking.status === "cancelled" || booking.status === "checked_out") {
+  if (["cancelled", "checked_out"].includes(booking.status)) {
     return res.status(400).json({ success: false, error: "This booking cannot be extended" });
   }
 
   const { requested_from, requested_to, reason } = req.body;
   const fromDate = parseDateInput(requested_from);
   const toDate = parseDateInput(requested_to);
-  const bookingStart = parseDateInput(booking.check_in);
-  const bookingEnd = parseDateInput(booking.check_out);
-
-  if (!fromDate || !toDate) {
+  const currentCheckout = parseDateInput(booking.check_out);
+  if (!fromDate || !toDate || !currentCheckout) {
     return res.status(400).json({ success: false, error: "Invalid requested dates" });
   }
-
-  if (fromDate < bookingStart) {
-    return res.status(400).json({ success: false, error: "Requested start date cannot be before the original booking start" });
+  if (fromDate.getTime() !== currentCheckout.getTime()) {
+    return res.status(400).json({
+      success: false,
+      error: "Extension must start from the current checkout date",
+    });
+  }
+  if (toDate <= currentCheckout) {
+    return res.status(400).json({
+      success: false,
+      error: "New check-out date must be after the current check-out date",
+    });
   }
 
-  if (toDate <= fromDate) {
-    return res.status(400).json({ success: false, error: "Requested end date must be after the requested start date" });
-  }
-
-  if (booking.status === "checked_in" && fromDate.getTime() !== bookingEnd.getTime()) {
-    return res.status(400).json({ success: false, error: "Extensions must start from the current checkout date once the guest is checked in" });
-  }
-
-  const existingPending = await BookingExtensionRequest.findOne({
+  const existingActive = await BookingExtensionRequest.findOne({
     where: {
       booking_id: booking.id,
-      status: {
-        [Op.in]: ["pending", "approved"],
-      },
+      status: { [Op.in]: ["pending", "approved"] },
     },
   });
-
-  if (existingPending) {
-    return res.status(409).json({ success: false, error: "There is already an active extension request for this booking" });
+  if (existingActive) {
+    return res.status(409).json({
+      success: false,
+      error: "There is already an active extension request for this booking",
+    });
   }
 
   const overlapCount = await countOverlappingBookings({
     roomId: booking.room_id,
-    checkIn: requested_from,
+    checkIn: booking.check_out,
     checkOut: requested_to,
     excludeBookingId: booking.id,
     transaction: null,
   });
-
   if (overlapCount > 0) {
-    return res.status(409).json({ success: false, error: "The requested date range is not available for this room" });
+    return res.status(409).json({
+      success: false,
+      error: "The requested extension dates are not available for this room",
+    });
   }
 
-  const totals = buildExtensionTotals(booking, requested_from, requested_to, booking.room);
-
-  const request = await BookingExtensionRequest.create({
-    booking_id: booking.id,
-    customer_id: req.user.id,
-    requested_from,
-    requested_to,
-    nights: totals.nights,
+  const totals = await calculateExtensionAmounts({
+    booking,
+    room: booking.room,
+    extendedCheckoutDate: requested_to,
+  });
+  const request = await BookingExtensionRequest.create(buildExtensionRequestValues({
+    booking,
+    totals,
     reason,
     status: "pending",
-    extra_fare: totals.extra_fare,
-    extra_gst: totals.extra_gst,
-    extra_amount: totals.extra_amount,
-  });
+  }));
 
+  await writeAudit({
+    action: "EXTENSION_CREATED",
+    entityType: "booking",
+    entityId: booking.id,
+    actor: req.user,
+    metadata: extensionAuditMetadata(request, { extensionPaymentStatus: "pending" }),
+  });
   await Notification.create({
     target_role: "receptionist",
     title: "Room extension request",
-    message: `Extension requested for ${booking.booking_ref}: ${requested_from} to ${requested_to}`,
+    message: `Extension requested for ${booking.booking_ref}: ${booking.check_out} to ${requested_to}`,
     type: "booking",
   });
 
@@ -148,11 +132,16 @@ async function createBookingExtensionRequest(req, res) {
   await notifyCustomer(
     `Extension request submitted for ${booking.booking_ref}`,
     customer,
-    `<p>Your extension request from <strong>${requested_from}</strong> to <strong>${requested_to}</strong> has been submitted to reception.</p>`,
+    `<p>Your extension request to <strong>${requested_to}</strong> has been submitted to reception.</p>
+     <p>Extension payable: INR ${totals.extensionPayableAmount.toFixed(2)}</p>`,
     `Your extension request for ${booking.booking_ref} has been submitted.`
   );
 
-  return res.status(201).json({ success: true, data: request, message: "Extension request sent to receptionist" });
+  return res.status(201).json({
+    success: true,
+    data: toExtensionPayload(request),
+    message: "Extension request sent to receptionist",
+  });
 }
 
 async function listBookingExtensionRequests(req, res) {
@@ -164,187 +153,329 @@ async function listBookingExtensionRequests(req, res) {
         include: [{ model: Room, as: "room" }],
       },
       { model: Customer, as: "customer" },
+      { model: PaymentTransaction, as: "paymentTransactions", required: false },
     ],
     order: [["requested_at", "DESC"]],
   });
-
-  return res.json({ success: true, data: requests, total: requests.length, page: 1, limit: requests.length || 10 });
+  const data = requests.map(toExtensionPayload);
+  return res.json({ success: true, data, total: data.length, page: 1, limit: data.length || 10 });
 }
 
 async function processBookingExtensionRequest(req, res) {
-  const request = await BookingExtensionRequest.findByPk(req.params.id, {
-    include: [
-      {
-        model: Booking,
-        as: "booking",
-        include: [{ model: Room, as: "room" }],
-      },
-      { model: Customer, as: "customer" },
-    ],
-  });
-
-  if (!request) {
-    return res.status(404).json({ success: false, error: "Request not found" });
-  }
-
-  if (request.status !== "pending") {
-    return res.status(400).json({ success: false, error: "This request has already been processed" });
-  }
-
-  const { action, payment_method, response_text } = req.body;
-  let qrTransaction = null;
-
-  if (action === "reject") {
-    await request.update({
-      status: "rejected",
-      response_text: response_text || "Request rejected.",
-      processed_by_staff_id: req.user.id,
-      responded_at: new Date(),
+  const transaction = await sequelize.transaction();
+  try {
+    const request = await BookingExtensionRequest.findByPk(req.params.id, {
+      include: [
+        { model: Booking, as: "booking", include: [{ model: Room, as: "room" }] },
+        { model: Customer, as: "customer" },
+      ],
+      transaction,
+      lock: transaction.LOCK?.UPDATE,
     });
-
-    await Notification.create({
-      target_role: "customer",
-      target_id: request.customer_id,
-      title: "Extension request rejected",
-      message: `Your extension request for ${request.booking.booking_ref} was rejected by reception.`,
-      type: "booking",
-    });
-
-    await notifyCustomer(
-      `Extension request rejected for ${request.booking.booking_ref}`,
-      request.customer,
-      `<p>Your extension request for ${request.booking.booking_ref} has been rejected by reception.</p><p>Reason: ${response_text || "Not specified"}</p>`,
-      `Your extension request for ${request.booking.booking_ref} was rejected.`
-    );
-
-    return res.json({ success: true, data: request, message: "Request rejected" });
-  }
-
-  if (action === "approve") {
-    if (!payment_method) {
-      return res.status(400).json({ success: false, error: "Payment method is required to approve the extension" });
+    if (!request) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: "Request not found" });
+    }
+    if (request.status !== "pending") {
+      await transaction.rollback();
+      return res.status(409).json({ success: false, error: "This request has already been processed" });
     }
 
-    const updates = {
-      status: payment_method === "cash" ? "completed" : "approved",
-      payment_method,
-      payment_status: payment_method === "cash" ? "paid" : "pending",
-      response_text: response_text || "Approved by reception",
-      processed_by_staff_id: req.user.id,
-      responded_at: new Date(),
-    };
+    const { action, response_text } = req.body;
+    if (action === "reject") {
+      await request.update({
+        status: "rejected",
+        response_text: response_text || "Request rejected.",
+        processed_by_staff_id: req.user.id,
+        responded_at: new Date(),
+      }, { transaction });
+      await writeAudit({
+        action: "EXTENSION_REJECTED",
+        entityType: "booking",
+        entityId: request.booking_id,
+        actor: req.user,
+        metadata: extensionAuditMetadata(request, { note: response_text || null }),
+        transaction,
+      });
+      await Notification.create({
+        target_role: "customer",
+        target_id: request.customer_id,
+        title: "Extension request rejected",
+        message: `Your extension request for ${request.booking.booking_ref} was rejected by reception.`,
+        type: "booking",
+      }, { transaction });
+      await transaction.commit();
 
-    if (payment_method === "cash") {
-      await applyExtensionToBooking(request.booking, request);
-      updates.completed_at = new Date();
+      await notifyCustomer(
+        `Extension request rejected for ${request.booking.booking_ref}`,
+        request.customer,
+        `<p>Your extension request was rejected by reception.</p><p>Reason: ${response_text || "Not specified"}</p>`,
+        `Your extension request for ${request.booking.booking_ref} was rejected.`
+      );
+      return res.json({ success: true, data: toExtensionPayload(request), message: "Request rejected" });
     }
 
-    if (payment_method === "qr") {
-      const hotelSettings = await HotelSetting.findByPk(1);
-      qrTransaction = await createQrTransaction({
-        PaymentTransaction,
-        booking: request.booking,
-        customer: request.customer,
-        hotelSettings,
-        amount: request.extra_amount,
-        description: `Extension request #${request.id}`,
+    if (action !== "approve") {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: "Invalid action" });
+    }
+
+    if (String(request.booking.check_out) !== String(request.original_checkout_date || request.requested_from)) {
+      await transaction.rollback();
+      return res.status(409).json({
+        success: false,
+        error: "Booking dates changed after this request was created. Please create a new extension request.",
+      });
+    }
+    const overlapCount = await countOverlappingBookings({
+      roomId: request.booking.room_id,
+      checkIn: request.booking.check_out,
+      checkOut: request.extended_checkout_date || request.requested_to,
+      excludeBookingId: request.booking.id,
+      transaction,
+      lockRows: true,
+    });
+    if (overlapCount > 0) {
+      await transaction.rollback();
+      return res.status(409).json({
+        success: false,
+        error: "The room is no longer available for the requested extension period",
       });
     }
 
-    await request.update(updates);
+    const totals = await calculateExtensionAmounts({
+      booking: request.booking,
+      room: request.booking.room,
+      extendedCheckoutDate: request.extended_checkout_date || request.requested_to,
+    });
+    await applyExtensionToBooking(request.booking, totals, transaction);
+    await request.update({
+      ...buildExtensionRequestValues({
+        booking: request.booking,
+        totals,
+        reason: request.reason,
+        status: "approved",
+        processedBy: req.user.id,
+      }),
+      response_text: response_text || "Approved by reception. Manual extension payment pending.",
+    }, { transaction });
 
+    await writeAudit({
+      action: "EXTENSION_PAYMENT_PENDING",
+      entityType: "booking",
+      entityId: request.booking_id,
+      actor: req.user,
+      metadata: extensionAuditMetadata(request),
+      transaction,
+    });
     await Notification.create({
       target_role: "customer",
       target_id: request.customer_id,
-      title: payment_method === "cash" ? "Extension approved" : "Extension approved, payment pending",
-      message: payment_method === "cash"
-        ? `Your extension request for ${request.booking.booking_ref} is approved and will be charged in cash.`
-        : `Your extension request for ${request.booking.booking_ref} is approved. Please complete the payment on your portal.`,
+      title: "Extension approved - payment pending",
+      message: `Your extension for ${request.booking.booking_ref} is approved. Pay INR ${totals.extensionPayableAmount.toFixed(2)} at reception.`,
       type: "booking",
-    });
+    }, { transaction });
+    await transaction.commit();
 
     await notifyCustomer(
-      `Extension ${payment_method === "cash" ? "approved" : "approved, payment pending"} for ${request.booking.booking_ref}`,
+      `Extension approved for ${request.booking.booking_ref}`,
       request.customer,
-      `<p>Your extension request for ${request.booking.booking_ref} has been approved.</p>
-       <p>New range: <strong>${request.requested_from}</strong> to <strong>${request.requested_to}</strong></p>
-       <p>Charges: INR ${request.extra_amount}</p>
-       <p>Payment: ${payment_method}</p>`,
-      `Your extension request for ${request.booking.booking_ref} has been approved.`
+      `<p>Your stay is extended to <strong>${totals.extendedCheckoutDate}</strong>.</p>
+       <p>Please pay INR ${totals.extensionPayableAmount.toFixed(2)} at reception. Online payment is not used for extensions.</p>`,
+      `Your extension for ${request.booking.booking_ref} is approved and manual payment is pending.`
     );
+    return res.json({
+      success: true,
+      data: { request: toExtensionPayload(request), booking: request.booking },
+      message: "Extension approved; manual payment confirmation is required",
+    });
+  } catch (error) {
+    if (!transaction.finished) await transaction.rollback();
+    throw error;
+  }
+}
 
-    const responseData = { request };
-    if (qrTransaction) {
-      responseData.payment_transaction = serializeTransaction(qrTransaction);
+async function confirmExtensionPayment(req, res) {
+  if (!["receptionist", "admin"].includes(req.user?.role)) {
+    return res.status(403).json({
+      success: false,
+      error: "Only a receptionist or admin can confirm extension payment",
+    });
+  }
+  const transaction = await sequelize.transaction();
+  try {
+    const request = await BookingExtensionRequest.findByPk(req.params.id, {
+      transaction,
+      lock: transaction.LOCK?.UPDATE,
+    });
+    if (!request) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: "Extension request not found" });
+    }
+    if (request.payment_status === "paid" || extensionRemaining(request) === 0) {
+      await transaction.rollback();
+      return res.status(409).json({ success: false, error: "Extension payment has already been confirmed" });
+    }
+    if (request.status !== "approved") {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: "Extension must be approved before payment confirmation" });
     }
 
-    return res.json({ success: true, data: responseData, message: "Request approved" });
-  }
+    const booking = await Booking.findByPk(request.booking_id, {
+      transaction,
+      lock: transaction.LOCK?.UPDATE,
+    });
+    if (!booking) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: "Booking not found" });
+    }
 
-  return res.status(400).json({ success: false, error: "Invalid action" });
+    const amount = roundMoney(req.body.amount);
+    const requiredAmount = extensionRemaining(request);
+    if (Math.round(amount * 100) !== Math.round(requiredAmount * 100)) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Exact remaining extension payment of INR ${requiredAmount.toFixed(2)} is required`,
+      });
+    }
+
+    const paymentMode = req.body.payment_mode;
+    const reference = String(req.body.transaction_reference || "").trim() || null;
+    if (paymentMode !== "cash" && !reference) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "Transaction/reference number is required for this payment mode",
+      });
+    }
+    if (reference) {
+      const duplicate = await PaymentTransaction.findOne({
+        where: { payment_reference: reference },
+        transaction,
+      });
+      if (duplicate) {
+        await transaction.rollback();
+        return res.status(409).json({ success: false, error: "Transaction reference has already been used" });
+      }
+    }
+
+    const now = new Date();
+    const priorPaid = roundMoney(booking.amount_paid || 0);
+    const totalPaid = roundMoney(priorPaid + amount);
+    const bookingTotal = roundMoney(booking.total_amount);
+    if (totalPaid > bookingTotal) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: "Confirmed amount exceeds booking total" });
+    }
+    const bookingRemaining = roundMoney(Math.max(bookingTotal - totalPaid, 0));
+
+    await request.update({
+      payment_method: paymentMode,
+      payment_status: "paid",
+      status: "completed",
+      extension_paid_amount: roundMoney(Number(request.extension_paid_amount || 0) + amount),
+      extension_remaining_amount: 0,
+      payment_reference: reference,
+      payment_note: req.body.note || null,
+      payment_confirmed_by: req.user.id,
+      payment_confirmed_by_role: req.user.role,
+      payment_confirmed_at: now,
+      completed_at: now,
+    }, { transaction });
+    await booking.update({
+      amount_paid: totalPaid,
+      remaining_amount: bookingRemaining,
+      payment_status: bookingRemaining === 0 ? "paid" : "partially_paid",
+      payment_method: paymentMode,
+      payment_mode: paymentMode,
+      payment_confirmed_by: req.user.id,
+      payment_confirmed_at: now,
+      paid_at: bookingRemaining === 0 ? now : booking.paid_at,
+    }, { transaction });
+    const payment = await PaymentTransaction.create({
+      booking_id: booking.id,
+      customer_id: booking.customer_id,
+      extension_request_id: request.id,
+      amount,
+      payment_method: paymentMode,
+      payment_type: "extension_payment",
+      status: "paid",
+      payment_reference: reference,
+      paid_at: now,
+      remarks: req.body.note || `Extension payment confirmed by ${req.user.role} ${req.user.id}`,
+      confirmed_by_user_id: req.user.id,
+      confirmed_by_role: req.user.role,
+      updated_at: now,
+    }, { transaction });
+
+    await writeAudit({
+      action: "EXTENSION_PAYMENT_CONFIRMED",
+      entityType: "booking",
+      entityId: booking.id,
+      actor: req.user,
+      metadata: extensionAuditMetadata(request, {
+        amount,
+        paymentMode,
+        reference,
+        confirmedBy: req.user.id,
+        confirmedByRole: req.user.role,
+        note: req.body.note || null,
+        ip: req.ip || null,
+        userAgent: req.get?.("user-agent") || null,
+        paymentTransactionId: payment.id,
+      }),
+      transaction,
+    });
+    await Notification.create({
+      target_role: "customer",
+      target_id: booking.customer_id,
+      title: "Extension payment confirmed",
+      message: `INR ${amount.toFixed(2)} extension payment for ${booking.booking_ref} was confirmed by reception.`,
+      type: "booking",
+    }, { transaction });
+    await transaction.commit();
+
+    const refreshed = await BookingExtensionRequest.findByPk(request.id, {
+      include: [{ model: PaymentTransaction, as: "paymentTransactions", required: false }],
+    });
+    return res.json({
+      success: true,
+      data: {
+        extension: toExtensionPayload(refreshed),
+        booking,
+        payment,
+      },
+      message: "Extension payment confirmed. Final bill generation is now enabled.",
+    });
+  } catch (error) {
+    if (!transaction.finished) await transaction.rollback();
+    throw error;
+  }
 }
 
 async function payExtensionRequest(req, res) {
-  const request = await BookingExtensionRequest.findOne({
-    where: { id: req.params.id, customer_id: req.user.id },
-    include: [
-      {
-        model: Booking,
-        as: "booking",
-        include: [{ model: Room, as: "room" }],
-      },
-      { model: Customer, as: "customer" },
-    ],
+  return res.status(403).json({
+    success: false,
+    error: "Extension payment must be confirmed manually by hotel reception.",
   });
-
-  if (!request) {
-    return res.status(404).json({ success: false, error: "Extension request not found" });
-  }
-
-  if (request.status !== "approved" || request.payment_status !== "pending") {
-    return res.status(400).json({ success: false, error: "This extension request is not waiting for payment" });
-  }
-
-  await request.update({
-    payment_status: "paid",
-    status: "completed",
-    completed_at: new Date(),
-  });
-
-  await applyExtensionToBooking(request.booking, request);
-
-  await Notification.create({
-    target_role: "customer",
-    target_id: request.customer_id,
-    title: "Extension payment received",
-    message: `Your extension payment for ${request.booking.booking_ref} is complete and your stay has been updated.`,
-    type: "booking",
-  });
-
-  await notifyCustomer(
-    `Extension payment received for ${request.booking.booking_ref}`,
-    request.customer,
-    `<p>Your payment for the extension request on ${request.booking.booking_ref} was received.</p>
-     <p>Your booking is now updated to ${request.requested_from} – ${request.requested_to}.</p>`,
-    `Your extension payment for ${request.booking.booking_ref} was received.`
-  );
-
-  return res.json({ success: true, data: request, message: "Extension payment confirmed" });
 }
 
 async function getBookingExtensionRequests(req, res) {
   const requests = await BookingExtensionRequest.findAll({
     where: { booking_id: req.params.id, customer_id: req.user.id },
+    include: [{ model: PaymentTransaction, as: "paymentTransactions", required: false }],
     order: [["requested_at", "DESC"]],
   });
-
-  return res.json({ success: true, data: requests, total: requests.length, page: 1, limit: requests.length || 10 });
+  const data = requests.map(toExtensionPayload);
+  return res.json({ success: true, data, total: data.length, page: 1, limit: data.length || 10 });
 }
 
 module.exports = {
+  confirmExtensionPayment,
   createBookingExtensionRequest,
-  listBookingExtensionRequests,
-  processBookingExtensionRequest,
-  payExtensionRequest,
   getBookingExtensionRequests,
+  listBookingExtensionRequests,
+  payExtensionRequest,
+  processBookingExtensionRequest,
 };

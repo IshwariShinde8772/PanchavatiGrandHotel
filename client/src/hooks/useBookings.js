@@ -29,6 +29,7 @@ export function useCancelBooking() {
     mutationFn: ({ id, payload }) => bookingAPI.cancel(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["receptionist-room-grid"] });
     },
   });
 }
@@ -58,7 +59,10 @@ export function useExtensionTransactions(bookingId) {
     queryFn: async () => {
       const allTransactions = await transactionAPI.mine();
       return {
-        data: (allTransactions.data || []).filter((t) => t.booking_id === parseInt(bookingId)),
+        data: (allTransactions.data || []).filter((t) => (
+          t.booking_id === parseInt(bookingId)
+          && (t.payment_type === "extension_payment" || Boolean(t.extension_request_id))
+        )),
       };
     },
     enabled: Boolean(bookingId),
@@ -114,6 +118,18 @@ export function useProcessExtensionRequest() {
     mutationFn: ({ requestId, payload }) => bookingAPI.processExtensionRequest(requestId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["receptionist-extension-requests"] });
+    },
+  });
+}
+
+export function useConfirmExtensionPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ requestId, payload }) => bookingAPI.confirmExtensionPayment(requestId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receptionist-extension-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["receptionist-bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["receptionist-bill-search"] });
     },
   });
 }

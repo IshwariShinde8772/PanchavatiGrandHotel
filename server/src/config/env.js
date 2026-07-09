@@ -52,20 +52,6 @@ const env = {
     "panchavati_nashik_secret_key_change_this_in_prod",
   jwtExpiry: process.env.JWT_EXPIRY || "7d",
 
-  twofactor: {
-    apiKey: process.env.TWOFACTOR_API_KEY || "",
-    template: process.env.TWOFACTOR_TEMPLATE || "",
-  },
-
-  fast2smsKey: process.env.FAST2SMS_API_KEY || "",
-  fast2smsSenderId: process.env.FAST2SMS_SENDER_ID || "PVHTEL",
-
-  twilio: {
-    sid: process.env.TWILIO_ACCOUNT_SID || "",
-    token: process.env.TWILIO_AUTH_TOKEN || "",
-    phone: process.env.TWILIO_PHONE_NUMBER || "",
-  },
-
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || "",
     apiKey: process.env.CLOUDINARY_API_KEY || "",
@@ -105,6 +91,7 @@ const env = {
   },
 
   gstPercent: Number.isFinite(gstPercent) ? gstPercent : 0,
+  hotelTimeZone: process.env.HOTEL_TIMEZONE || "Asia/Kolkata",
   staticAssetsPath: process.env.STATIC_ASSETS_PATH || "",
 };
 

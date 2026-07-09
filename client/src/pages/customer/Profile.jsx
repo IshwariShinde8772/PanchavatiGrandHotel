@@ -7,6 +7,8 @@ import Button from "../../components/common/Button";
 import InputField from "../../components/forms/InputField";
 import SelectField from "../../components/forms/SelectField";
 import { authAPI } from "../../api/authAPI";
+import { uploadAPI } from "../../api/uploadAPI";
+import FileUpload from "../../components/forms/FileUpload";
 
 export default function Profile() {
   const { t } = useTranslation();
@@ -19,6 +21,8 @@ export default function Profile() {
     id_number: "",
     id_expiry: "",
     avatar_url: "",
+    id_doc_url: "",
+    id_doc_public_id: "",
   });
 
   const [loading, setLoading] = useState(true);
@@ -38,6 +42,8 @@ export default function Profile() {
         id_number: profileData.data.id_number || "",
         id_expiry: profileData.data.id_expiry || "",
         avatar_url: profileData.data.avatar_url || "",
+        id_doc_url: profileData.data.id_doc_url || "",
+        id_doc_public_id: profileData.data.id_doc_public_id || "",
       });
       setLoading(false);
     }
@@ -49,13 +55,28 @@ export default function Profile() {
       toast.success(t("common.profileUpdated"));
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || t("common.profileUpdateFailed"));
+      toast.error(t("common.profileUpdateFailed"));
     },
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
     updateMutation.mutate(form);
+  };
+
+  const uploadIdProof = async (file) => {
+    if (!file) return;
+    try {
+      const result = await uploadAPI.cloudinary(file, "customer-id-proofs");
+      setForm((current) => ({
+        ...current,
+        id_doc_url: result.data.url,
+        id_doc_public_id: result.data.public_id,
+      }));
+      toast.success(t("shared.actionCompleted"));
+    } catch (error) {
+      toast.error(t("shared.actionFailed"));
+    }
   };
 
   if (loading) {
@@ -102,6 +123,7 @@ export default function Profile() {
                 onChange={(e) => setForm({ ...form, id_type: e.target.value })}
                 options={[
                   { label: t("customer.passport"), value: "passport" },
+                  { label: "Aadhaar", value: "aadhaar" },
                   { label: t("customer.nationalId"), value: "national_id" },
                   { label: t("customer.drivingLicense"), value: "driving_license" },
                   { label: t("customer.other"), value: "other" },
@@ -109,6 +131,14 @@ export default function Profile() {
               />
               <InputField label={t("customer.idNumber")} value={form.id_number} onChange={(e) => setForm({ ...form, id_number: e.target.value })} />
               <InputField label={t("customer.idExpiryDate")} type="date" value={form.id_expiry} onChange={(e) => setForm({ ...form, id_expiry: e.target.value })} />
+            </div>
+            <div className="mt-4">
+              <FileUpload
+                label={form.id_doc_url ? t("bookingUi.updateId") : t("bookingUi.uploadId")}
+                currentFileLabel={form.id_doc_url ? t("ops.idProof") : ""}
+                onChange={(event) => uploadIdProof(event.target.files?.[0])}
+              />
+              {form.id_doc_url ? <p className="mt-2 text-sm font-semibold text-success">{t("bookingUi.updateId")}</p> : null}
             </div>
           </div>
 

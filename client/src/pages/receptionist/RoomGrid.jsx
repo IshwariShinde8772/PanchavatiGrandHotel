@@ -1,6 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 import PageHeader from "../../components/common/PageHeader";
 import { roomAPI } from "../../api/roomAPI";
+import { roomStatusLabel } from "../../utils/i18nLabels";
 
 const STATUS_COLORS = {
   available: "bg-green-100 text-green-700 border-green-200",
@@ -17,9 +20,22 @@ const LEGEND = [
 ];
 
 export default function RoomGrid() {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { data: res, isLoading } = useQuery({
     queryKey: ["receptionist-room-grid"],
     queryFn: () => roomAPI.getReceptionistRoomGrid(),
+    refetchInterval: 20000,
+    refetchIntervalInBackground: false,
+  });
+
+  const markCleanedMutation = useMutation({
+    mutationFn: roomAPI.markRoomCleaned,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["receptionist-room-grid"] });
+      toast.success(t("reception.cleanedSuccess"));
+    },
+    onError: () => toast.error(t("shared.actionFailed")),
   });
 
   const rooms = res?.data || [];
@@ -34,22 +50,22 @@ export default function RoomGrid() {
   return (
     <div className="space-y-8 pb-12">
       <PageHeader 
-        eyebrow="Room Occupancy Grid" 
-        title="Live Facility Map" 
-        description="Monitor current room statuses across all floors and categories." 
+        eyebrow={t("reception.roomGridEyebrow")}
+        title={t("reception.roomGridTitle")}
+        description={t("reception.roomGridDescription")}
       />
 
       <div className="flex flex-wrap gap-4 p-4 section-card">
         {LEGEND.map((item) => (
           <div key={item.status} className="flex items-center gap-2">
             <div className={`w-4 h-4 rounded ${STATUS_COLORS[item.status].split(' ')[0]}`}></div>
-            <span className="text-xs font-bold text-mutedText uppercase tracking-wider">{item.label}</span>
+            <span className="text-xs font-bold text-mutedText uppercase tracking-wider">{roomStatusLabel(t, item.status)}</span>
           </div>
         ))}
       </div>
 
       {isLoading ? (
-        <p className="p-10 text-center text-mutedText">Loading room grid...</p>
+        <p className="p-10 text-center text-mutedText">{t("common.loading")}</p>
       ) : (
         <div className="space-y-10">
           {Object.entries(groupedRooms).map(([category, categoryRooms]) => (
@@ -61,10 +77,22 @@ export default function RoomGrid() {
                 {categoryRooms.map((room) => (
                   <div 
                     key={room.id}
-                    className={`rounded-2xl border-2 p-6 flex flex-col items-center justify-center text-center transition-transform hover:-translate-y-1 ${STATUS_COLORS[room.status]}`}
+                    className={`rounded-2xl border-2 p-6 flex flex-col items-center justify-center text-center transition-transform hover:-translate-y-1 ${STATUS_COLORS[room.status] || STATUS_COLORS.available}`}
                   >
                     <p className="text-2xl font-bold font-heading mb-1">{room.room_number}</p>
-                    <p className="text-[10px] uppercase font-bold tracking-widest opacity-80">{room.status}</p>
+                    <p className="text-[10px] uppercase font-bold tracking-widest opacity-80">{roomStatusLabel(t, room.status)}</p>
+                    {room.status === "cleaning" ? (
+                      <button
+                        type="button"
+                        disabled={markCleanedMutation.isPending && markCleanedMutation.variables === room.id}
+                        onClick={() => markCleanedMutation.mutate(room.id)}
+                        className="mt-4 rounded-lg bg-white/90 px-3 py-2 text-xs font-black text-yellow-800 shadow-sm transition hover:bg-white disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {markCleanedMutation.isPending && markCleanedMutation.variables === room.id
+                          ? t("shared.processing")
+                          : t("statuses.room.markCleaned")}
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>

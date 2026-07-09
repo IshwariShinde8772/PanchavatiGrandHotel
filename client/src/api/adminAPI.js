@@ -2,7 +2,7 @@ import axiosInstance from "./axiosInstance";
 
 export const adminAPI = {
   // Customers
-  listCustomers: () => axiosInstance.get("/admin/customers").then((res) => res.data),
+  listCustomers: (params) => axiosInstance.get("/admin/customers", { params }).then((res) => res.data),
   getCustomerDetail: (id) => axiosInstance.get(`/admin/customers/${id}`).then((res) => res.data),
   toggleCustomerDelete: (id) => axiosInstance.patch(`/admin/customers/${id}/toggle-delete`).then((res) => res.data),
 

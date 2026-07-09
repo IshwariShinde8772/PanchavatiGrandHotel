@@ -38,10 +38,12 @@ import CheckInOut from "../pages/receptionist/CheckInOut";
 import MaintenanceLogLive from "../pages/receptionist/MaintenanceLogLive";
 import CustomerHistory from "../pages/receptionist/CustomerHistory";
 import ReservedRooms from "../pages/receptionist/ReservedRooms";
-import ReceptionNotifications from "../pages/receptionist/Notifications";
+import AddStaff from "../pages/receptionist/AddStaff";
 import AdminLayout from "../pages/admin/AdminLayout";
 import AdminDashboard from "../pages/admin/Dashboard";
 import ManageRooms from "../pages/admin/ManageRooms";
+import Amenities from "../pages/admin/Amenities";
+import Logs from "../pages/admin/Logs";
 import ManageStaff from "../pages/admin/ManageStaff";
 import AllBookings from "../pages/admin/AllBookings";
 import Reports from "../pages/admin/Reports";
@@ -51,9 +53,11 @@ import FeedbackAdmin from "../pages/admin/FeedbackAdmin";
 import Enquiries from "../pages/admin/Enquiries";
 import Customers from "../pages/admin/Customers";
 import SettingsLive from "../pages/admin/SettingsLive";
-import SeasonalPricing from "../pages/admin/SeasonalPricing";
 import AdminOffers from "../pages/admin/Offers";
+import AdminCoupons from "../pages/admin/Coupons";
+import CouponDetails from "../pages/admin/CouponDetails";
 import AdminNotifications from "../pages/admin/Notifications";
+import RefundRequests from "../pages/shared/RefundRequests";
 import WorkerLayout from "../pages/worker/WorkerLayout";
 import MyTasks from "../pages/worker/MyTasks";
 import ReportIssue from "../pages/worker/ReportIssue";
@@ -75,8 +79,12 @@ export default function AppRouter() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/book/:roomId" element={<BookingFlow />} />
-        <Route path="/booking/confirmed/:bookingRef" element={<BookingConfirmPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<RoleRoute allowedRoles={["customer"]} />}>
+            <Route path="/book/:roomId" element={<BookingFlow />} />
+            <Route path="/booking/confirmed/:bookingRef" element={<BookingConfirmPage />} />
+          </Route>
+        </Route>
       </Route>
 
       <Route element={<ProtectedRoute />}>
@@ -100,7 +108,7 @@ export default function AppRouter() {
             <Route path="bookings" element={<ManageBookings />} />
             <Route path="reserved-rooms" element={<ReservedRooms />} />
             <Route path="room-grid" element={<RoomGrid />} />
-            <Route path="notifications" element={<ReceptionNotifications />} />
+            <Route path="add-staff" element={<AddStaff />} />
             <Route path="bill-generator" element={<BillGenerator />} />
             <Route path="walk-in" element={<WalkInBooking />} />
             <Route path="enquiries" element={<EnquiryManagement />} />
@@ -108,6 +116,7 @@ export default function AppRouter() {
             <Route path="check-in-out" element={<CheckInOut />} />
             <Route path="maintenance" element={<MaintenanceLogLive />} />
             <Route path="customer-history" element={<CustomerHistory />} />
+            <Route path="refunds" element={<RefundRequests portal="receptionist" />} />
           </Route>
         </Route>
 
@@ -115,6 +124,8 @@ export default function AppRouter() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
             <Route path="rooms" element={<ManageRooms />} />
+            <Route path="amenities" element={<Amenities />} />
+            <Route path="logs" element={<Logs />} />
             <Route path="staff" element={<ManageStaff />} />
             <Route path="bookings" element={<AllBookings />} />
             <Route path="reports" element={<Reports />} />
@@ -124,13 +135,15 @@ export default function AppRouter() {
             <Route path="enquiries" element={<Enquiries />} />
             <Route path="customers" element={<Customers />} />
             <Route path="settings" element={<SettingsLive />} />
-            <Route path="seasonal-pricing" element={<SeasonalPricing />} />
             <Route path="offers" element={<AdminOffers />} />
+            <Route path="coupons" element={<AdminCoupons />} />
+            <Route path="coupons/:id" element={<CouponDetails />} />
             <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="refunds" element={<RefundRequests portal="admin" />} />
           </Route>
         </Route>
 
-        <Route element={<RoleRoute allowedRoles={["housekeeping", "kitchen", "server"]} />}>
+        <Route element={<RoleRoute allowedRoles={["housekeeping", "kitchen", "server", "waiter"]} />}>
           <Route path="/worker" element={<WorkerLayout />}>
             <Route index element={<MyTasks />} />
             <Route path="report-issue" element={<ReportIssue />} />

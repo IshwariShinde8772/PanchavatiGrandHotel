@@ -1,8 +1,13 @@
+const { Op } = require("sequelize");
 const { Enquiry, Notification } = require("../../../models");
 const { sendEmail } = require("../../services/emailService");
+const { getPagination } = require("../../utils/pagination");
 
 async function createEnquiry(req, res) {
-  const enquiry = await Enquiry.create(req.body);
+  const enquiry = await Enquiry.create({
+    ...req.body,
+    source: req.body.source || "online",
+  });
 
   // Send notification to admin and receptionist about new enquiry
   await Notification.create({
@@ -30,17 +35,69 @@ async function createEnquiry(req, res) {
   });
 }
 
+async function createOfflineEnquiry(req, res) {
+  const payload = {
+    full_name: req.body.full_name,
+    phone: req.body.phone,
+    email: req.body.email || null,
+    enquiry_type: req.body.enquiry_type || "general",
+    check_in: req.body.check_in || null,
+    check_out: req.body.check_out || null,
+    adults: req.body.adults || null,
+    room_category: req.body.room_category || null,
+    message: req.body.message,
+    source: req.body.source || "offline",
+    status: req.body.status || "new",
+    created_by_staff_id: req.user.id,
+  };
+
+  const enquiry = await Enquiry.create(payload);
+
+  await Notification.create({
+    target_role: "admin",
+    target_id: null,
+    title: "Offline Enquiry Added",
+    message: `${enquiry.full_name} was added by reception (${enquiry.source}).`,
+    type: "enquiry",
+    is_read: false,
+  });
+
+  return res.status(201).json({
+    success: true,
+    data: enquiry,
+    message: "Offline enquiry added successfully",
+  });
+}
+
 async function listEnquiries(req, res) {
-  const enquiries = await Enquiry.findAll({
+  const { page, limit, offset } = getPagination(req.query);
+  const where = {};
+  if (req.query.q) {
+    const query = `%${req.query.q}%`;
+    where[Op.or] = [
+      { full_name: { [Op.like]: query } },
+      { phone: { [Op.like]: query } },
+      { email: { [Op.like]: query } },
+      { message: { [Op.like]: query } },
+    ];
+  }
+  const { count, rows } = await Enquiry.findAndCountAll({
+    where,
     order: [["created_at", "DESC"]],
+    offset,
+    limit,
   });
 
   return res.json({
     success: true,
-    data: enquiries,
-    total: enquiries.length,
-    page: 1,
-    limit: enquiries.length || 10,
+    data: rows,
+    total: count,
+    page,
+    limit,
+    totalRecords: count,
+    totalPages: Math.max(Math.ceil(count / limit), 1),
+    currentPage: page,
+    pageSize: limit,
   });
 }
 
@@ -95,6 +152,7 @@ async function deleteEnquiry(req, res) {
 
 module.exports = {
   createEnquiry,
+  createOfflineEnquiry,
   listEnquiries,
   respondToEnquiry,
   deleteEnquiry,

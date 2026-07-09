@@ -20,6 +20,7 @@ module.exports = (sequelize) => sequelize.define(
     cancellation_policy_text: { type: DataTypes.TEXT },
     late_checkout_fee: { type: DataTypes.DECIMAL(10, 2), defaultValue: 0 },
     extra_bed_charge: { type: DataTypes.DECIMAL(10, 2), defaultValue: 500 },
+    logs_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
     updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   },
   {

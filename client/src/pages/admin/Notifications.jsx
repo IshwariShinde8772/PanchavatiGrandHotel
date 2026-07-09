@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
@@ -33,6 +34,7 @@ function relativeTime(dateValue) {
 }
 
 export default function Notifications() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [showUnreadOnly, setShowUnreadOnly] = useState(false);
   const [form, setForm] = useState({
@@ -58,7 +60,7 @@ export default function Notifications() {
     mutationFn: adminAPI.sendNotification,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
-      toast.success("Notification sent successfully");
+      toast.success(t("shared.actionCompleted"));
       setForm({
         target_role: "reception",
         type: "system",
@@ -68,7 +70,7 @@ export default function Notifications() {
       });
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || "Failed to send notification");
+      toast.error(t("shared.actionFailed"));
     },
   });
 
@@ -78,7 +80,7 @@ export default function Notifications() {
       queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || "Failed to mark notification read");
+      toast.error(t("shared.actionFailed"));
     },
   });
 
@@ -86,10 +88,10 @@ export default function Notifications() {
     mutationFn: adminAPI.deleteNotification,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-notifications"] });
-      toast.success("Notification deleted");
+      toast.success(t("ops.deleted"));
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || "Failed to delete notification");
+      toast.error(t("shared.actionFailed"));
     },
   });
 
@@ -130,21 +132,21 @@ export default function Notifications() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Notifications"
-        title="Operational alerts and reminders"
-        description="Broadcast updates, send targeted notices, and track unread alerts."
+        eyebrow={t("layout.notifications")}
+        title={t("ops.notificationsTitle")}
+        description={t("ops.notificationsDescription")}
       />
 
       <form className="section-card p-6 space-y-4" onSubmit={handleSend}>
         <div className="grid gap-4 md:grid-cols-2">
           <SelectField
-            label="Target Role"
+            label={t("ops.targetRole")}
             value={form.target_role}
             onChange={(event) => setForm((current) => ({ ...current, target_role: event.target.value }))}
             options={targetRoleOptions}
           />
           <SelectField
-            label="Type"
+            label={t("ops.notificationType")}
             value={form.type}
             onChange={(event) => setForm((current) => ({ ...current, type: event.target.value }))}
             options={typeOptions}
@@ -153,13 +155,13 @@ export default function Notifications() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <InputField
-            label="Title"
+            label={t("ops.offerTitle")}
             value={form.title}
             onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
             required
           />
           <InputField
-            label="Target ID (optional)"
+            label={t("ops.targetId")}
             type="number"
             value={form.target_id}
             onChange={(event) => setForm((current) => ({ ...current, target_id: event.target.value }))}
@@ -169,7 +171,7 @@ export default function Notifications() {
 
         <label className="block">
           <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "#526359" }}>
-            Message
+            {t("ops.message")}
           </span>
           <textarea
             value={form.message}
@@ -180,27 +182,27 @@ export default function Notifications() {
         </label>
 
         <Button type="submit" disabled={createMutation.isPending}>
-          {createMutation.isPending ? "Sending..." : "Send Notification"}
+          {createMutation.isPending ? t("ops.sending") : t("ops.sendNotification")}
         </Button>
       </form>
 
       <div className="section-card p-5 flex items-center justify-between">
         <p className="text-sm font-semibold">
-          Notifications ({notifications.length}) • Unread ({unreadCount})
+          {t("layout.notifications")} ({notifications.length}) • {t("ops.unread")} ({unreadCount})
         </p>
         <Button
           variant="outline"
           onClick={() => setShowUnreadOnly((current) => !current)}
         >
-          {showUnreadOnly ? "Show All" : "Show Unread Only"}
+          {showUnreadOnly ? t("ops.showAll") : t("ops.showUnread")}
         </Button>
       </div>
 
       <div className="section-card divide-y divide-divider overflow-hidden">
         {isLoading ? (
-          <p className="p-5 text-mutedText">Loading notifications...</p>
+          <p className="p-5 text-mutedText">{t("ops.loadingNotifications")}</p>
         ) : notifications.length === 0 ? (
-          <p className="p-5 text-mutedText">No notifications found.</p>
+          <p className="p-5 text-mutedText">{t("ops.noNotifications")}</p>
         ) : (
           notifications.map((item) => (
             <div key={item.id} className="p-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -226,7 +228,7 @@ export default function Notifications() {
                     onClick={() => markReadMutation.mutate(item.id)}
                     disabled={markReadMutation.isPending}
                   >
-                    Mark Read
+                    {t("ops.markRead")}
                   </Button>
                 ) : null}
                 <Button
@@ -234,7 +236,7 @@ export default function Notifications() {
                   onClick={() => deleteMutation.mutate(item.id)}
                   disabled={deleteMutation.isPending}
                 >
-                  Delete
+                  {t("common.delete")}
                 </Button>
               </div>
             </div>

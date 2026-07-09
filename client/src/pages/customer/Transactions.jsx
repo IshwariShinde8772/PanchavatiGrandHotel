@@ -25,7 +25,7 @@ export default function Transactions() {
       queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
       toast.success(t("customer.paymentCompleted"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || t("customer.paymentConfirmFailed")),
+    onError: () => toast.error(t("customer.paymentConfirmFailed")),
   });
 
   const regenerateMutation = useMutation({
@@ -36,7 +36,7 @@ export default function Transactions() {
       setActiveId(result?.data?.transaction?.id || null);
       toast.success(t("customer.qrGenerated"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || t("customer.qrGenerateFailed")),
+    onError: () => toast.error(t("customer.qrGenerateFailed")),
   });
 
   const deleteMutation = useMutation({
@@ -46,7 +46,7 @@ export default function Transactions() {
       setSelectedIds(new Set());
       toast.success(t("customer.transactionDeleted"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || t("customer.transactionDeleteFailed")),
+    onError: () => toast.error(t("customer.transactionDeleteFailed")),
   });
 
   const clearMutation = useMutation({
@@ -56,17 +56,21 @@ export default function Transactions() {
       setSelectedIds(new Set());
       toast.success(t("customer.transactionsCleared"));
     },
-    onError: (error) => toast.error(error.response?.data?.error || t("customer.transactionsClearFailed")),
+    onError: () => toast.error(t("customer.transactionsClearFailed")),
   });
 
   const rows = response?.data || [];
+  const deletableRows = useMemo(
+    () => rows.filter((item) => item.payment_method !== "online"),
+    [rows]
+  );
   const activeTransaction = useMemo(() => {
     if (activeId) return rows.find((item) => item.id === activeId) || null;
-    return rows.find((item) => item.status === "pending") || rows[0] || null;
+    return rows.find((item) => item.status === "pending" && item.payment_method === "qr") || rows[0] || null;
   }, [activeId, rows]);
 
   const handleSelectAll = (e) => {
-    setSelectedIds(e.target.checked ? new Set(rows.map((row) => row.id)) : new Set());
+    setSelectedIds(e.target.checked ? new Set(deletableRows.map((row) => row.id)) : new Set());
   };
 
   const handleSelectOne = (id) => {
@@ -94,7 +98,7 @@ export default function Transactions() {
     <div className="space-y-6">
       <PageHeader eyebrow={t("nav.transactions")} title={t("customer.transactionsTitle")} description={t("customer.transactionsDescription")} />
 
-      {activeTransaction && activeTransaction.status === "pending" ? (
+      {activeTransaction && activeTransaction.status === "pending" && activeTransaction.payment_method === "qr" ? (
         <QrPaymentPanel
           transaction={activeTransaction}
           title={t("customer.pendingQrPayment")}
@@ -135,7 +139,7 @@ export default function Transactions() {
           <div className="section-card divide-y divide-divider overflow-hidden">
             {rows.length > 0 && (
               <div className="grid gap-4 border-b border-divider p-5 md:grid-cols-[40px_1.1fr_0.8fr_0.8fr_180px] md:items-center">
-                <input type="checkbox" checked={selectedIds.size === rows.length && rows.length > 0} onChange={handleSelectAll} className="rounded" />
+                <input type="checkbox" checked={selectedIds.size === deletableRows.length && deletableRows.length > 0} onChange={handleSelectAll} className="rounded" />
                 <div className="text-sm font-semibold">{t("customer.bookingReferenceHeader")}</div>
                 <div className="text-sm font-semibold">{t("common.amount")}</div>
                 <div className="text-sm font-semibold">{t("common.status")}</div>
@@ -144,7 +148,13 @@ export default function Transactions() {
             )}
             {rows.map((item) => (
               <div key={item.id} className="grid gap-4 p-5 md:grid-cols-[40px_1.1fr_0.8fr_0.8fr_180px] md:items-center">
-                <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => handleSelectOne(item.id)} className="rounded" />
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(item.id)}
+                  disabled={item.payment_method === "online"}
+                  onChange={() => handleSelectOne(item.id)}
+                  className="rounded disabled:opacity-40"
+                />
                 <div>
                   <p className="font-semibold">{item.booking_ref || t("customer.transactionNumber", { id: item.id })}</p>
                   <p className="text-sm text-mutedText">
@@ -167,21 +177,23 @@ export default function Transactions() {
                   </span>
                 </div>
                 <div className="flex gap-2">
-                  {item.status === "pending" ? <Button variant="outline" size="sm" onClick={() => setActiveId(item.id)}>{t("customer.openQr")}</Button> : null}
+                  {item.status === "pending" && item.payment_method === "qr" ? <Button variant="outline" size="sm" onClick={() => setActiveId(item.id)}>{t("customer.openQr")}</Button> : null}
                   {item.status !== "pending" ? <Button variant="outline" size="sm" onClick={() => setActiveId(item.id)}>{t("customer.view")}</Button> : null}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (confirm(t("customer.deleteTransactionConfirm"))) {
-                        deleteMutation.mutate({ id: item.id });
-                      }
-                    }}
-                    disabled={deleteMutation.isPending}
-                    className="flex-shrink-0 text-red-600 hover:bg-red-50"
-                  >
-                    {t("common.delete")}
-                  </Button>
+                  {item.payment_method !== "online" ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (confirm(t("customer.deleteTransactionConfirm"))) {
+                          deleteMutation.mutate({ id: item.id });
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="flex-shrink-0 text-red-600 hover:bg-red-50"
+                    >
+                      {t("common.delete")}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
             ))}

@@ -42,6 +42,20 @@ async function confirmCustomerTransaction(req, res) {
     return res.status(404).json({ success: false, error: "Transaction not found" });
   }
 
+  if (item.payment_type === "extension_payment" || item.extension_request_id) {
+    return res.status(403).json({
+      success: false,
+      error: "Extension payments can only be confirmed manually by hotel reception",
+    });
+  }
+
+  if (item.payment_method !== "qr") {
+    return res.status(400).json({
+      success: false,
+      error: "Online Razorpay payments must be completed through verified Razorpay Checkout",
+    });
+  }
+
   await expireTransactionIfNeeded(item);
 
   if (item.booking?.status === "cancelled") {
@@ -70,10 +84,21 @@ async function confirmCustomerTransaction(req, res) {
     updated_at: new Date(),
   });
 
-  await item.booking.update({
+  const isReservation = item.booking.reservation_type === "reserved_booking";
+  await item.booking.update(isReservation ? {
+    payment_status: "pay_at_hotel",
+    payment_method: "qr",
+    status: "reserved",
+    advance_paid: item.amount,
+    amount_paid: item.amount,
+    remaining_amount: Math.max(Number(item.booking.total_amount) - Number(item.amount), 0),
+  } : {
     payment_status: "paid",
     payment_method: "qr",
     status: "confirmed",
+    advance_paid: item.amount,
+    amount_paid: item.amount,
+    remaining_amount: 0,
   });
 
   await Notification.create({
@@ -105,6 +130,19 @@ async function regenerateCustomerTransactionQr(req, res) {
   if (!item) {
     return res.status(404).json({ success: false, error: "Transaction not found" });
   }
+  if (item.payment_type === "extension_payment" || item.extension_request_id) {
+    return res.status(403).json({
+      success: false,
+      error: "Extension payments do not use online or QR payment",
+    });
+  }
+
+  if (item.payment_method !== "qr") {
+    return res.status(400).json({
+      success: false,
+      error: "Only legacy QR transactions can be regenerated",
+    });
+  }
 
   if (item.status === "paid") {
     return res.status(400).json({ success: false, error: "Payment is already completed" });
@@ -128,6 +166,9 @@ async function regenerateCustomerTransactionQr(req, res) {
     booking,
     customer,
     hotelSettings,
+    amount: booking.reservation_type === "reserved_booking" ? booking.advance_amount : booking.total_amount,
+    description: booking.reservation_type === "reserved_booking" ? "Reservation 10% advance" : "Full booking payment",
+    allowLocalFallback: booking.reservation_type === "reserved_booking",
   });
 
   const fresh = await PaymentTransaction.findByPk(created.id, { include: transactionInclude });
@@ -150,6 +191,19 @@ async function deleteCustomerTransaction(req, res) {
   if (!transaction) {
     return res.status(404).json({ success: false, error: "Transaction not found" });
   }
+  if (transaction.payment_type === "extension_payment" || transaction.extension_request_id) {
+    return res.status(403).json({
+      success: false,
+      error: "Extension payment history cannot be deleted by the customer",
+    });
+  }
+
+  if (transaction.payment_method === "online") {
+    return res.status(400).json({
+      success: false,
+      error: "Razorpay payment audit records cannot be deleted",
+    });
+  }
 
   await transaction.destroy();
 
@@ -158,10 +212,13 @@ async function deleteCustomerTransaction(req, res) {
 
 async function clearCustomerTransactions(req, res) {
   await PaymentTransaction.destroy({
-    where: { customer_id: req.user.id },
+    where: {
+      customer_id: req.user.id,
+      payment_method: "qr",
+    },
   });
 
-  return res.json({ success: true, message: "All transactions cleared" });
+  return res.json({ success: true, message: "Legacy QR transactions cleared" });
 }
 
 module.exports = {

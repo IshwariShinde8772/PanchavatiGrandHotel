@@ -17,8 +17,8 @@ export default function Contact() {
           <h3 className="font-heading text-3xl">{t("publicPages.reachUs")}</h3>
           <div className="mt-4 space-y-3 text-mutedText">
             <p>Near Ramkund Ghat, Panchavati, Nashik, Maharashtra 422003</p>
-            <p>Phone: +91-0253-4447777</p>
-            <p>Email: stay@panchavatgrand.in</p>
+            <p>{t("shared.phone")}: +91-0253-4447777</p>
+            <p>{t("shared.email")}: stay@panchavatgrand.in</p>
             <p>WhatsApp: +91-99999-99999</p>
           </div>
         </div>

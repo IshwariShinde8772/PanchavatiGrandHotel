@@ -1,10 +1,12 @@
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, Line, ComposedChart } from "recharts";
 import { formatCurrency } from "../../utils/formatCurrency";
+import { useTranslation } from "react-i18next";
 
 export default function RevenueChart({ data = [] }) {
+  const { t } = useTranslation();
   return (
     <div className="section-card p-5">
-      <h3 className="font-heading text-2xl">Revenue Trend</h3>
+      <h3 className="font-heading text-2xl">{t("admin.revenueTrend")}</h3>
       <div className="mt-5 h-80">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data}>

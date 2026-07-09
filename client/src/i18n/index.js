@@ -1,5 +1,7 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
+import { extendedResources } from "./extendedResources.js";
+import { moduleResources } from "./moduleResources.js";
 
 export const supportedLanguages = [
   { code: "en", label: "English", shortLabel: "EN" },
@@ -7,11 +9,11 @@ export const supportedLanguages = [
   { code: "mr", label: "मराठी", shortLabel: "म" },
 ];
 
-const resources = {
+export const resources = {
   en: {
     translation: {
       common: {
-        hotelName: "Panchavati Grand",
+        hotelName: "Panchavati Grand Hotel",
         tagline: "Where Sacred Nashik Meets Luxury",
         heritage: "Heritage Collection • Nashik",
         home: "Home",
@@ -116,7 +118,7 @@ const resources = {
         secure: "Razorpay Secure",
         ssl: "SSL Protected",
         gst: "GSTIN Verified",
-        rights: "© 2026 Panchavati Grand, Nashik. All Rights Reserved.",
+        rights: "© 2026 Panchavati Grand Hotel, Nashik. All Rights Reserved.",
       },
       publicPages: {
         roomsEyebrow: "Explore Our Rooms",
@@ -149,7 +151,7 @@ const resources = {
         availabilityCalendar: "Availability Calendar",
         policies: "Policies",
         policyCheckin: "Check-in: 2:00 PM | Check-out: 11:00 AM",
-        policyCancellation: "Free cancellation if cancelled 48h before check-in",
+        policyCancellation: "Free cancellation before 24 hours; late confirmed-booking cancellations incur a 10% charge",
         policySmoking: "Smoking: Not allowed | Pets: Not allowed",
         policyExtraBed: "Extra bed available at ₹500/night",
         instantConfirmation: "Instant confirmation",
@@ -166,6 +168,7 @@ const resources = {
         allViews: "All Views",
         standard: "Standard",
         deluxe: "Deluxe",
+        regular: "Regular",
         family: "Family",
         presidential: "Presidential",
         economy: "Economy",
@@ -342,12 +345,14 @@ const resources = {
         paid: "I Have Paid",
         generateNew: "Generate New QR",
       },
+      ...extendedResources.en,
+      ...moduleResources.en,
     },
   },
   hi: {
     translation: {
       common: {
-        hotelName: "पंचवटी ग्रैंड",
+        hotelName: "Panchavati Grand Hotel",
         tagline: "जहां पवित्र नाशिक विलासिता से मिलता है",
         heritage: "हेरिटेज कलेक्शन • नाशिक",
         home: "होम",
@@ -452,7 +457,7 @@ const resources = {
         secure: "रेजरपे सुरक्षित",
         ssl: "SSL सुरक्षित",
         gst: "GSTIN सत्यापित",
-        rights: "© 2026 पंचवटी ग्रैंड, नाशिक. सर्वाधिकार सुरक्षित.",
+        rights: "© 2026 Panchavati Grand Hotel, नाशिक. सर्वाधिकार सुरक्षित.",
       },
       publicPages: {
         roomsEyebrow: "हमारे कमरे देखें",
@@ -460,7 +465,7 @@ const resources = {
         roomsDescription: "दृश्य, मेहमानों की संख्या, श्रेणी और तारीखों के अनुसार सही कमरा खोजें.",
         aboutEyebrow: "नाशिक क्यों?",
         aboutTitle: "गोदावरी, अंगूरबाग और मंदिर पत्थर से प्रेरित होटल",
-        aboutDescription: "पंचवटी ग्रैंड नाशिक के पवित्र नदी किनारे, कुंभ ऊर्जा, वाइन-कंट्री की शांति और हेमाडपंथी स्थापत्य की गरिमा पर आधारित है.",
+        aboutDescription: "Panchavati Grand Hotel नाशिक के पवित्र नदी किनारे, कुंभ ऊर्जा, वाइन-कंट्री की शांति और हेमाडपंथी स्थापत्य की गरिमा पर आधारित है.",
         whyNashikTitle: "नाशिक क्यों?",
         whyNashikText: "नाशिक तीर्थ, रामायण भूमि, वाइन राजधानी और सह्याद्री द्वार का अनोखा संगम है. हमारा ठहराव अनुभव इन्हीं सबको साथ रखता है.",
         designTitle: "डिजाइन भाषा",
@@ -471,7 +476,7 @@ const resources = {
         reachUs: "हम तक पहुंचें",
         offersEyebrow: "विशेष ऑफर",
         offersTitle: "एक्सक्लूसिव पैकेज और डायरेक्ट-बुकिंग लाभ",
-        offersDescription: "तीर्थयात्रियों के लंबे ठहराव से लेकर प्रीमियम वाइनयार्ड अनुभव तक, पंचवटी ग्रैंड में नाशिक का बेहतरीन अनुभव लें.",
+        offersDescription: "तीर्थयात्रियों के लंबे ठहराव से लेकर प्रीमियम वाइनयार्ड अनुभव तक, Panchavati Grand Hotel में नाशिक का बेहतरीन अनुभव लें.",
         validUntil: "{{date}} तक मान्य",
         limitedPeriod: "सीमित अवधि",
         noOffers: "अभी कोई सक्रिय ऑफर उपलब्ध नहीं है.",
@@ -502,6 +507,7 @@ const resources = {
         allViews: "सभी दृश्य",
         standard: "स्टैंडर्ड",
         deluxe: "डीलक्स",
+        regular: "रेगुलर",
         family: "फैमिली",
         presidential: "प्रेसिडेंशियल",
         economy: "इकॉनमी",
@@ -678,12 +684,14 @@ const resources = {
         paid: "मैंने भुगतान कर दिया",
         generateNew: "नया QR बनाएं",
       },
+      ...extendedResources.hi,
+      ...moduleResources.hi,
     },
   },
   mr: {
     translation: {
       common: {
-        hotelName: "पंचवटी ग्रँड",
+        hotelName: "Panchavati Grand Hotel",
         tagline: "जिथे पवित्र नाशिक आलिशान पाहुणचाराला भेटते",
         heritage: "हेरिटेज कलेक्शन • नाशिक",
         home: "होम",
@@ -788,7 +796,7 @@ const resources = {
         secure: "रेझरपे सुरक्षित",
         ssl: "SSL सुरक्षित",
         gst: "GSTIN सत्यापित",
-        rights: "© 2026 पंचवटी ग्रँड, नाशिक. सर्व हक्क राखीव.",
+        rights: "© 2026 Panchavati Grand Hotel, नाशिक. सर्व हक्क राखीव.",
       },
       publicPages: {
         roomsEyebrow: "आमचे रूम्स पहा",
@@ -796,7 +804,7 @@ const resources = {
         roomsDescription: "दृश्य, पाहुणे, श्रेणी आणि मुक्कामाच्या तारखांनुसार योग्य रूम शोधा.",
         aboutEyebrow: "नाशिक का?",
         aboutTitle: "गोदावरी, द्राक्षबागा आणि मंदिर दगडांनी घडलेले हॉटेल",
-        aboutDescription: "पंचवटी ग्रँड नाशिकच्या पवित्र नदीकिनाऱ्याभोवती, कुंभ ऊर्जेभोवती, वाइन-कंट्रीच्या शांततेभोवती आणि हेमाडपंथी स्थापत्याच्या भव्यतेभोवती डिझाइन केलेले आहे.",
+        aboutDescription: "Panchavati Grand Hotel नाशिकच्या पवित्र नदीकिनाऱ्याभोवती, कुंभ ऊर्जेभोवती, वाइन-कंट्रीच्या शांततेभोवती आणि हेमाडपंथी स्थापत्याच्या भव्यतेभोवती डिझाइन केलेले आहे.",
         whyNashikTitle: "नाशिक का?",
         whyNashikText: "नाशिक म्हणजे तीर्थक्षेत्र, रामायण भूमी, वाइन राजधानी आणि सह्याद्रीचे प्रवेशद्वार यांचा दुर्मीळ संगम. आमचा मुक्काम अनुभव हे सगळे एकत्र धरतो.",
         designTitle: "डिझाइन भाषा",
@@ -807,7 +815,7 @@ const resources = {
         reachUs: "आमच्याशी संपर्क",
         offersEyebrow: "विशेष ऑफर्स",
         offersTitle: "एक्सक्लूसिव्ह पॅकेजेस आणि डायरेक्ट-बुकिंग मूल्य",
-        offersDescription: "तीर्थयात्रेसाठी लांब मुक्कामांपासून प्रीमियम वाइनयार्ड अनुभवांपर्यंत, पंचवटी ग्रँडमध्ये नाशिकचा सर्वोत्तम अनुभव घ्या.",
+        offersDescription: "तीर्थयात्रेसाठी लांब मुक्कामांपासून प्रीमियम वाइनयार्ड अनुभवांपर्यंत, Panchavati Grand Hotel मध्ये नाशिकचा सर्वोत्तम अनुभव घ्या.",
         validUntil: "{{date}} पर्यंत वैध",
         limitedPeriod: "मर्यादित कालावधी",
         noOffers: "सध्या कोणतीही सक्रिय ऑफर उपलब्ध नाही.",
@@ -838,6 +846,7 @@ const resources = {
         allViews: "सर्व दृश्ये",
         standard: "स्टँडर्ड",
         deluxe: "डिलक्स",
+        regular: "रेग्युलर",
         family: "फॅमिली",
         presidential: "प्रेसिडेन्शियल",
         economy: "इकॉनॉमी",
@@ -1014,14 +1023,20 @@ const resources = {
         paid: "मी पेमेंट केले",
         generateNew: "नवीन QR तयार करा",
       },
+      ...extendedResources.mr,
+      ...moduleResources.mr,
     },
   },
 };
 
-const savedLanguage = localStorage.getItem("panchavati-language");
-const initialLanguage = supportedLanguages.some((language) => language.code === savedLanguage)
-  ? savedLanguage
-  : "en";
+export function resolveSavedLanguage(savedLanguage) {
+  return supportedLanguages.some((language) => language.code === savedLanguage)
+    ? savedLanguage
+    : "en";
+}
+
+const savedLanguage = globalThis.localStorage?.getItem("panchavati-language");
+const initialLanguage = resolveSavedLanguage(savedLanguage);
 
 i18n.use(initReactI18next).init({
   resources,
@@ -1033,10 +1048,14 @@ i18n.use(initReactI18next).init({
 });
 
 i18n.on("languageChanged", (language) => {
-  localStorage.setItem("panchavati-language", language);
-  document.documentElement.lang = language;
+  globalThis.localStorage?.setItem("panchavati-language", resolveSavedLanguage(language));
+  if (globalThis.document?.documentElement) {
+    globalThis.document.documentElement.lang = resolveSavedLanguage(language);
+  }
 });
 
-document.documentElement.lang = initialLanguage;
+if (globalThis.document?.documentElement) {
+  globalThis.document.documentElement.lang = initialLanguage;
+}
 
 export default i18n;

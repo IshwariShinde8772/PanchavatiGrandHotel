@@ -19,6 +19,10 @@ const socialAuthRoutes = require("./routes/auth/socialAuth");
 const authMiddleware = require("./middleware/authMiddleware");
 const roleGuard = require("./middleware/roleGuard");
 const errorHandler = require("./middleware/errorHandler");
+const { autoCancelOverdueBookings } = require("./services/reservationService");
+const { isLogSavingEnabled } = require("./services/auditService");
+const { expireOffers } = require("./controllers/room/offerController");
+const { expireCoupons } = require("./services/couponService");
 
 const app = express();
 const allowedOrigins = new Set((env.corsOrigins || []).map((origin) => String(origin).trim()).filter(Boolean));
@@ -80,10 +84,38 @@ app.use("/api/auth", socialAuthRoutes);
 app.use("/api/customer", authMiddleware, roleGuard(["customer"]), customerRoutes);
 app.use("/api/receptionist", authMiddleware, roleGuard(["receptionist", "manager"]), receptionistRoutes);
 app.use("/api/admin", authMiddleware, roleGuard(["admin"]), adminRoutes);
-app.use("/api/worker", authMiddleware, roleGuard(["housekeeping", "kitchen", "server"]), workerRoutes);
+app.use("/api/worker", authMiddleware, roleGuard(["housekeeping", "kitchen", "server", "waiter"]), workerRoutes);
 
 cron.schedule("0 2 1 * *", () => {
   console.log("Monthly report automation placeholder triggered");
+});
+
+cron.schedule("*/5 * * * *", async () => {
+  try {
+    const results = await autoCancelOverdueBookings();
+    const cancelledCount = results.filter((item) => item.cancelled).length;
+    const failureCount = results.filter((item) => item.reason === "processing_error").length;
+    if ((cancelledCount > 0 || failureCount > 0) && await isLogSavingEnabled()) {
+      console.log("No-show auto-cancel job completed", {
+        candidates: results.length,
+        cancelled: cancelledCount,
+        failed: failureCount,
+      });
+    }
+  } catch (error) {
+    console.error("No-show auto-cancel job failed", error);
+  }
+}, {
+  timezone: env.hotelTimeZone,
+  noOverlap: true,
+});
+
+cron.schedule("15 0 * * *", async () => {
+  try {
+    await Promise.all([expireOffers(), expireCoupons()]);
+  } catch (error) {
+    console.error("Promotion expiry cleanup job failed", error);
+  }
 });
 
 app.use(errorHandler);

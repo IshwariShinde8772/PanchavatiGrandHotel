@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import toast from "react-hot-toast";
 import PageHeader from "../../components/common/PageHeader";
 import Button from "../../components/common/Button";
@@ -8,14 +9,8 @@ import SelectField from "../../components/forms/SelectField";
 import { workerAPI } from "../../api/workerAPI";
 import { roomAPI } from "../../api/roomAPI";
 
-const priorityOptions = [
-  { label: "Medium", value: "medium" },
-  { label: "Low", value: "low" },
-  { label: "High", value: "high" },
-  { label: "Urgent", value: "urgent" },
-];
-
 export default function ReportIssue() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     room_id: "",
@@ -31,7 +26,7 @@ export default function ReportIssue() {
   });
 
   const roomOptions = [
-    { label: "Select room (optional)", value: "" },
+    { label: `${t("ops.selectRoom")} (${t("shared.optional")})`, value: "" },
     ...(roomsResponse?.data || []).map((room) => ({
       label: `${room.room_number} - ${room.name}`,
       value: String(room.id),
@@ -43,7 +38,7 @@ export default function ReportIssue() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["worker-my-tasks"] });
       queryClient.invalidateQueries({ queryKey: ["receptionist-maintenance"] });
-      toast.success("Issue reported successfully");
+      toast.success(t("shared.actionCompleted"));
       setForm({
         room_id: "",
         room_number: "",
@@ -53,7 +48,7 @@ export default function ReportIssue() {
       });
     },
     onError: (error) => {
-      toast.error(error.response?.data?.error || "Failed to report issue");
+      toast.error(t("shared.actionFailed"));
     },
   });
 
@@ -61,12 +56,12 @@ export default function ReportIssue() {
     event.preventDefault();
 
     if (!form.title.trim()) {
-      toast.error("Issue title is required");
+      toast.error(t("shared.required"));
       return;
     }
 
     if (!form.description.trim()) {
-      toast.error("Issue description is required");
+      toast.error(t("shared.required"));
       return;
     }
 
@@ -88,15 +83,15 @@ export default function ReportIssue() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Report an Issue"
-        title="Send maintenance updates from the floor"
-        description="Create a maintenance ticket with room details, title, priority, and context."
+        eyebrow={t("ops.reportIssue")}
+        title={t("ops.reportIssueTitle")}
+        description={t("ops.reportIssueDescription")}
       />
 
       <form onSubmit={handleSubmit} className="section-card p-6 space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <SelectField
-            label="Room Selection"
+            label={t("ops.roomSelection")}
             value={form.room_id}
             onChange={(event) => setForm((current) => ({
               ...current,
@@ -105,7 +100,7 @@ export default function ReportIssue() {
             options={roomOptions}
           />
           <InputField
-            label="Room Number (if no selection)"
+            label={t("ops.roomNumberOptional")}
             value={form.room_number}
             onChange={(event) => setForm((current) => ({
               ...current,
@@ -117,7 +112,7 @@ export default function ReportIssue() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <InputField
-            label="Issue Title"
+            label={t("ops.issueTitle")}
             value={form.title}
             onChange={(event) => setForm((current) => ({
               ...current,
@@ -126,19 +121,19 @@ export default function ReportIssue() {
             required
           />
           <SelectField
-            label="Priority"
+            label={t("ops.priority")}
             value={form.priority}
             onChange={(event) => setForm((current) => ({
               ...current,
               priority: event.target.value,
             }))}
-            options={priorityOptions}
+            options={["medium", "low", "high", "urgent"].map((value) => ({ label: t(`ops.${value}`), value }))}
           />
         </div>
 
         <label className="block">
           <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: "#526359" }}>
-            Description
+            {t("ops.description")}
           </span>
           <textarea
             value={form.description}
@@ -148,15 +143,14 @@ export default function ReportIssue() {
             }))}
             required
             className="min-h-28 w-full rounded-2xl border border-divider px-4 py-3 text-sm outline-none focus:border-saffron"
-            placeholder="Describe the issue and what you observed"
+            placeholder={t("ops.description")}
           />
         </label>
 
         <Button type="submit" disabled={reportIssueMutation.isPending}>
-          {reportIssueMutation.isPending ? "Submitting..." : "Submit Issue"}
+          {reportIssueMutation.isPending ? t("common.submitting") : t("ops.submitIssue")}
         </Button>
       </form>
     </div>
   );
 }
-

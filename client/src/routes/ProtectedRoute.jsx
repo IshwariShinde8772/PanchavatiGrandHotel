@@ -7,7 +7,14 @@ export default function ProtectedRoute() {
   const location = useLocation();
 
   if (!isAuthenticated || !token) {
-    return <Navigate to="/login" replace state={{ redirectTo: location.pathname }} />;
+    const redirectTo = `${location.pathname}${location.search}${location.hash}`;
+    return (
+      <Navigate
+        to={`/login?redirectTo=${encodeURIComponent(redirectTo)}`}
+        replace
+        state={{ redirectTo }}
+      />
+    );
   }
 
   return <Outlet />;

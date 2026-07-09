@@ -8,14 +8,18 @@ import { authAPI } from "../../api/authAPI";
 import { useLoginMutation } from "../../hooks/useAuth";
 import { roomAPI } from "../../api/roomAPI";
 import { isValidPhoneNumber, normalizePhoneNumber } from "../../utils/phone";
+import { useTranslation } from "react-i18next";
+import { getApiErrorMessage } from "../../utils/getApiErrorMessage";
 
 export default function Login() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState("email");
   const [otpSent, setOtpSent] = useState(false);
   const [otpSending, setOtpSending] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpDestination, setOtpDestination] = useState("");
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -28,11 +32,11 @@ export default function Login() {
 
   useEffect(() => {
     if (searchParams.get("reason") === "session_expired") {
-      toast.error("Your session expired. Please login again.");
+      toast.error(t("auth.sessionExpired"));
     }
 
     if (searchParams.get("error") === "google_not_configured") {
-      toast.error("Google login is not configured right now. Please use email/password login.");
+      toast.error(t("auth.googleUnavailable"));
     }
   }, [searchParams]);
 
@@ -51,23 +55,23 @@ export default function Login() {
   const sendOtp = async () => {
     const normalizedPhone = normalizePhoneNumber(form.phone);
     if (!isValidPhoneNumber(normalizedPhone)) {
-      toast.error("Enter a valid phone number");
+      toast.error(t("auth.validPhone"));
       return;
     }
 
     setOtpSending(true);
     try {
-      await authAPI.sendOtp({ phone: normalizedPhone });
+      const response = await authAPI.sendOtp({ phone: normalizedPhone });
       setForm((prev) => ({ ...prev, phone: normalizedPhone, otp: "" }));
       setOtpSent(true);
       setOtpCooldown(60);
-      toast.success("OTP sent to your phone");
+      setOtpDestination(response?.data?.masked_email || t("auth.registeredEmail"));
+      toast.success(t("auth.otpSentEmail"));
     } catch (error) {
-      const validationErrors = error?.response?.data?.details?.fieldErrors?.phone;
-      const message = validationErrors?.[0] || error?.response?.data?.error || "Failed to send OTP";
       setOtpSent(false);
       setOtpCooldown(0);
-      toast.error(message);
+      setOtpDestination("");
+      toast.error(getApiErrorMessage(error, t("shared.actionFailed"), t));
     } finally {
       setOtpSending(false);
     }
@@ -79,12 +83,12 @@ export default function Login() {
 
     if (mode === "phone") {
       if (!isValidPhoneNumber(normalizedPhone)) {
-        toast.error("Enter a valid phone number");
+        toast.error(t("auth.validPhone"));
         return;
       }
 
       if (!form.otp.trim()) {
-        toast.error("Enter the OTP");
+        toast.error(t("auth.enterOtp"));
         return;
       }
     }
@@ -102,7 +106,7 @@ export default function Login() {
         try {
           await roomAPI.saveRoom(parseInt(pendingRoomId));
           sessionStorage.removeItem('pendingSaveRoom');
-          toast.success("Room added to your wishlist!");
+          toast.success(t("room.addedWishlist"));
         } catch (saveError) {
           console.error("Failed to save pending room:", saveError);
           // Don't show error for this, just log it
@@ -121,11 +125,7 @@ export default function Login() {
       }
       navigate(from, { replace: true });
     } catch (error) {
-      const message =
-        error?.response?.data?.error ||
-        error?.message ||
-        "Login failed. Please check your credentials.";
-      toast.error(message);
+      toast.error(getApiErrorMessage(error, t("apiErrors.generic"), t));
     }
   };
 
@@ -137,10 +137,10 @@ export default function Login() {
       <div className="w-full max-w-[480px] rounded-2xl border border-gray-100 bg-white p-8 shadow-lg md:p-12">
         <div className="mb-8 text-center">
           <h1 className="font-heading text-4xl font-bold" style={{ color: "#0A4D34" }}>
-            Welcome Back
+            {t("auth.welcomeBack")}
           </h1>
           <p className="mt-2 text-sm" style={{ color: "#526359" }}>
-            Use your saved customer, admin, receptionist, or worker account credentials.
+            {t("auth.accountCredentials")}
           </p>
         </div>
 
@@ -153,6 +153,7 @@ export default function Login() {
                 setMode(nextMode);
                 setOtpSent(false);
                 setOtpSending(false);
+                setOtpDestination("");
                 setForm((prev) => ({ ...prev, otp: "" }));
               }}
               className="flex-1 rounded-lg py-2 text-sm font-bold capitalize transition-all"
@@ -162,7 +163,7 @@ export default function Login() {
                 boxShadow: mode === nextMode ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
               }}
             >
-              {nextMode}
+              {nextMode === "email" ? t("auth.emailMode") : t("auth.phoneMode")}
             </button>
           ))}
         </div>
@@ -171,14 +172,14 @@ export default function Login() {
           {mode === "email" ? (
             <>
               <InputField
-                label="Email Address"
+                label={t("auth.emailAddress")}
                 type="email"
                 value={form.email}
                 onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
                 required
               />
               <InputField
-                label="Password"
+                label={t("auth.password")}
                 type="password"
                 value={form.password}
                 onChange={(event) => setForm((prev) => ({ ...prev, password: event.target.value }))}
@@ -186,14 +187,14 @@ export default function Login() {
               />
               <div className="text-right">
                 <Link to="/forgot-password" className="text-xs font-semibold hover:underline" style={{ color: "#0A4D34" }}>
-                  Forgot Password?
+                  {t("auth.forgotPassword")}
                 </Link>
               </div>
             </>
           ) : (
             <>
               <InputField
-                label="Phone Number"
+                label={t("auth.phoneNumber")}
                 type="tel"
                 value={form.phone}
                 onChange={(event) => {
@@ -203,6 +204,7 @@ export default function Login() {
                     setOtpSent(false);
                   }
                   setOtpCooldown(0);
+                  setOtpDestination("");
                 }}
                 placeholder="9876543210 or +919876543210"
                 required
@@ -215,7 +217,7 @@ export default function Login() {
                   className="w-full rounded-lg py-3 text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-60"
                   style={{ backgroundColor: "#0A4D34", color: "#ffffff" }}
                 >
-                  {otpSending ? "Sending OTP..." : "Send OTP"}
+                  {otpSending ? t("auth.sendingOtp") : t("auth.sendOtp")}
                 </button>
               ) : (
                 <>
@@ -229,7 +231,7 @@ export default function Login() {
                     }
                   />
                   <p className="text-xs" style={{ color: "#526359" }}>
-                    Enter the 6-digit OTP sent to your phone.
+                    {t("auth.otpInstruction", { destination: otpDestination || t("auth.registeredEmail") })}
                   </p>
                   <button
                     type="button"
@@ -237,7 +239,7 @@ export default function Login() {
                     disabled={otpSending || otpCooldown > 0}
                     className="w-full py-2 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-60"
                   >
-                    {otpSending ? "Resending..." : otpCooldown > 0 ? `Resend OTP in ${otpCooldown}s` : "Resend OTP"}
+                    {otpSending ? t("auth.sendingOtp") : otpCooldown > 0 ? t("auth.resendOtpIn", { seconds: otpCooldown }) : t("auth.resendOtp")}
                   </button>
                 </>
               )}
@@ -251,7 +253,7 @@ export default function Login() {
               className="w-full rounded-lg py-3 text-sm font-bold transition-opacity hover:opacity-90 disabled:opacity-60"
               style={{ backgroundColor: "#0A4D34", color: "#ffffff" }}
             >
-              {login.isPending ? "Signing in..." : "Sign In"}
+              {login.isPending ? t("auth.signingIn") : t("auth.signIn")}
             </button>
           )}
         </form>
@@ -265,7 +267,7 @@ export default function Login() {
               className="bg-white px-3 text-[10px] font-bold uppercase tracking-widest"
               style={{ color: "#526359" }}
             >
-              Or continue with
+              {t("auth.continueWith")}
             </span>
           </div>
         </div>
@@ -273,9 +275,9 @@ export default function Login() {
         <SocialLoginButtons />
 
         <p className="mt-8 text-center text-sm" style={{ color: "#526359" }}>
-          Don't have an account?{" "}
+          {t("auth.noAccount")}{" "}
           <Link to="/register" className="font-bold hover:underline" style={{ color: "#0A4D34" }}>
-            Register now
+            {t("auth.registerNow")}
           </Link>
         </p>
       </div>

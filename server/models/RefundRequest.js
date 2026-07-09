@@ -1,0 +1,46 @@
+const { DataTypes } = require("sequelize");
+
+module.exports = (sequelize) => sequelize.define(
+  "RefundRequest",
+  {
+    id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+    booking_id: { type: DataTypes.INTEGER, allowNull: false, unique: true },
+    customer_id: { type: DataTypes.INTEGER, allowNull: false },
+    customer_name: { type: DataTypes.STRING, allowNull: false },
+    customer_email: { type: DataTypes.STRING },
+    customer_phone: { type: DataTypes.STRING },
+    total_booking_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+    amount_paid: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+    cancellation_charge: { type: DataTypes.DECIMAL(10, 2), allowNull: false, defaultValue: 0 },
+    refund_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
+    refund_reason: { type: DataTypes.TEXT },
+    cancellation_policy_applied: { type: DataTypes.STRING(80), allowNull: false },
+    status: {
+      type: DataTypes.ENUM("pending_admin_approval", "pending", "approved", "processing", "completed", "rejected", "failed"),
+      allowNull: false,
+      defaultValue: "pending_admin_approval",
+    },
+    requested_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    approved_by_staff_id: { type: DataTypes.INTEGER },
+    approved_at: { type: DataTypes.DATE },
+    processed_by_admin_id: { type: DataTypes.INTEGER },
+    processed_at: { type: DataTypes.DATE },
+    completed_at: { type: DataTypes.DATE },
+    refunded_at: { type: DataTypes.DATE },
+    rejected_at: { type: DataTypes.DATE },
+    rejection_reason: { type: DataTypes.TEXT },
+    payment_reference_id: { type: DataTypes.STRING },
+    refund_transaction_id: { type: DataTypes.STRING },
+    razorpay_payment_id: { type: DataTypes.STRING },
+    razorpay_refund_id: { type: DataTypes.STRING, unique: true },
+    customer_upi_id: { type: DataTypes.STRING },
+    hotel_upi_id: { type: DataTypes.STRING },
+    failure_reason: { type: DataTypes.TEXT },
+    created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+    updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  },
+  {
+    tableName: "refund_requests",
+    timestamps: false,
+  }
+);

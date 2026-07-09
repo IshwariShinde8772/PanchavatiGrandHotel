@@ -1,6 +1,17 @@
+const { Op } = require("sequelize");
 const { Offer } = require("../../../models");
+const { getPagination } = require("../../utils/pagination");
 
-const ROOM_CATEGORIES = new Set(["All", "Standard", "Deluxe", "Suite", "Family", "Presidential"]);
+const ROOM_CATEGORIES = new Map([
+  ["all", "All"],
+  ["standard", "Standard"],
+  ["deluxe", "Deluxe"],
+  ["regular", "Regular"],
+]);
+
+function normalizeOfferCategory(value) {
+  return ROOM_CATEGORIES.get(String(value || "All").trim().toLocaleLowerCase()) || null;
+}
 
 function normalizeOfferPayload(payload = {}) {
   const normalized = {
@@ -9,7 +20,7 @@ function normalizeOfferPayload(payload = {}) {
     discount_pct: Number(payload.discount_pct),
     start_date: payload.start_date,
     end_date: payload.end_date,
-    room_category: payload.room_category || "All",
+    room_category: normalizeOfferCategory(payload.room_category),
     is_active: payload.is_active === undefined ? true : Boolean(payload.is_active),
   };
 
@@ -29,7 +40,7 @@ function normalizeOfferPayload(payload = {}) {
     return { error: "Offer end date must be on or after start date" };
   }
 
-  if (!ROOM_CATEGORIES.has(normalized.room_category)) {
+  if (!normalized.room_category) {
     return { error: "Offer room category is invalid" };
   }
 
@@ -37,10 +48,36 @@ function normalizeOfferPayload(payload = {}) {
 }
 
 async function listOffers(req, res) {
-  const offers = await Offer.findAll({
+  await expireOffers();
+  const { page, limit, offset } = getPagination(req.query);
+  const { count, rows } = await Offer.findAndCountAll({
     order: [["start_date", "ASC"]],
+    offset,
+    limit,
   });
-  return res.json({ success: true, data: offers });
+  return res.json({
+    success: true,
+    data: rows,
+    total: count,
+    page,
+    limit,
+    totalRecords: count,
+    totalPages: Math.max(Math.ceil(count / limit), 1),
+    currentPage: page,
+    pageSize: limit,
+  });
+}
+
+async function expireOffers(referenceDate = new Date().toISOString().slice(0, 10)) {
+  await Offer.update(
+    { is_active: false },
+    {
+      where: {
+        is_active: true,
+        end_date: { [Op.lt]: referenceDate },
+      },
+    }
+  );
 }
 
 async function createOffer(req, res) {
@@ -82,4 +119,5 @@ module.exports = {
   createOffer,
   updateOffer,
   deleteOffer,
+  expireOffers,
 };

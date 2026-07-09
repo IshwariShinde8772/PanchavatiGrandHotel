@@ -1,9 +1,9 @@
 const bcrypt = require("bcryptjs");
 const { Op } = require("sequelize");
 const { Customer, Booking, SavedRoom, Room, Notification } = require("../../../models");
-const { sendSms } = require("../../config/smsGateway");
 const { generateOtp, hashOtp, verifyOtp } = require("../../services/otpService");
 const { sendEmail } = require("../../services/emailService");
+const { writeAudit } = require("../../services/auditService");
 const { normalizePhoneNumber } = require("../../utils/phone");
 const { sanitizeUser } = require("../../utils/serializers");
 const { signToken } = require("../../utils/token");
@@ -30,8 +30,16 @@ function normalizeCustomerPayload(payload = {}) {
   };
 }
 
+function maskEmail(email) {
+  const [localPart = "", domain = ""] = String(email || "").trim().split("@");
+  if (!localPart || !domain) return "your registered email";
+  const visible = localPart.slice(0, Math.min(2, localPart.length));
+  const hidden = "*".repeat(Math.max(4, localPart.length - visible.length));
+  return `${visible}${hidden}@${domain}`;
+}
+
 async function sendOtpCode(req, res) {
-  const { phone, full_name } = normalizeCustomerPayload(req.body);
+  const { phone } = normalizeCustomerPayload(req.body);
   
   if (!phone) {
     return res.status(400).json({ success: false, error: "Phone number is required" });
@@ -52,6 +60,13 @@ async function sendOtpCode(req, res) {
     });
   }
 
+  if (!customer.email) {
+    return res.status(422).json({
+      success: false,
+      error: "This phone number is not linked to a registered email address. Please contact support.",
+    });
+  }
+
   // Block rapid OTP resend if OTP already pending (not expired)
   if (customer.otp_expires_at && new Date(customer.otp_expires_at) > new Date()) {
     const timeLeft = Math.ceil((new Date(customer.otp_expires_at) - new Date()) / 1000);
@@ -65,36 +80,56 @@ async function sendOtpCode(req, res) {
   const hashedOtp = await hashOtp(otp);
   const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
+  try {
+    const emailResult = await sendEmail({
+      to: customer.email,
+      subject: "Your Panchavati Grand login OTP",
+      html: `
+        <h2>Panchavati Grand</h2>
+        <p>Your one-time password is <strong>${otp}</strong>.</p>
+        <p>This code is valid for 10 minutes. Do not share it with anyone.</p>
+      `,
+      text: `Your Panchavati Grand login OTP is ${otp}. It is valid for 10 minutes.`,
+    });
+    if (emailResult?.success === false) {
+      throw new Error(emailResult.error || "Email provider rejected the request");
+    }
+  } catch (error) {
+    console.error(`Failed to send login OTP email for customer ${customer.id}: ${error.message}`);
+    return res.status(502).json({
+      success: false,
+      error: "Failed to send OTP. Please try again in a moment.",
+    });
+  }
+
   await customer.update({
     otp_code: hashedOtp,
     otp_expires_at: expiry,
     otp_verified: false,
   });
 
-  let smsResult;
-  try {
-    smsResult = await sendSms(
-      phone,
-      `Your Panchavati Grand OTP is ${otp}. It is valid for 10 minutes.`,
-      { otp }
-    );
-  } catch (error) {
-    console.error(`Failed to send OTP SMS to ${phone}: ${error.message}`);
-    return res.status(502).json({
-      success: false,
-      error: "Failed to send OTP. Please try again in a moment.",
-    });
-  }
-  console.log(`OTP sent to ${phone}`);
+  await writeAudit({
+    action: "otp_email_sent",
+    entityType: "auth",
+    entityId: customer.id,
+    actor: { id: customer.id, role: "customer" },
+    module: "auth",
+    message: "Login OTP sent to registered email",
+    metadata: { loginMethod: "phone" },
+  });
+
+  const maskedEmail = maskEmail(customer.email);
+  console.log(`Login OTP email sent for customer ${customer.id}`);
   return res.json({
     success: true,
     data: {
       phone,
+      masked_email: maskedEmail,
       expires_at: expiry,
-      provider: smsResult?.provider,
+      delivery: "email",
       otp: process.env.NODE_ENV === "production" ? undefined : otp,
     },
-    message: "OTP sent successfully",
+    message: `OTP sent to your registered email: ${maskedEmail}`,
   });
 }
 
@@ -121,6 +156,15 @@ async function verifyOtpCode(req, res) {
     otp_verified: true,
     otp_code: null,
     otp_expires_at: null,
+  });
+  await writeAudit({
+    action: "phone_otp_login_succeeded",
+    entityType: "auth",
+    entityId: customer.id,
+    actor: { id: customer.id, role: "customer" },
+    module: "auth",
+    message: "Customer signed in with phone and email OTP",
+    metadata: { loginMethod: "phone" },
   });
   console.log(`✅ OTP verified for ${phone}. Account: ${customer.full_name} (ID: ${customer.id})`);
 
@@ -368,7 +412,18 @@ async function getProfile(req, res) {
 
 async function updateProfile(req, res) {
   const customer = await Customer.findByPk(req.user.id);
-  await customer.update(normalizeCustomerPayload(req.body));
+  const payload = normalizeCustomerPayload(req.body);
+  const idProofChanged = payload.id_doc_public_id && payload.id_doc_public_id !== customer.id_doc_public_id;
+  await customer.update(payload);
+  if (idProofChanged) {
+    await writeAudit({
+      action: "profile_id_proof_updated",
+      entityType: "customer",
+      entityId: customer.id,
+      actor: req.user,
+      metadata: { idType: customer.id_type },
+    });
+  }
 
   return res.json({
     success: true,
@@ -493,7 +548,9 @@ async function clearNotifications(req, res) {
 }
 
 async function listCustomers(req, res) {
-  const customers = await Customer.findAll({
+  const { getPagination } = require("../../utils/pagination");
+  const { page, limit, offset } = getPagination(req.query);
+  const { count, rows: customers } = await Customer.findAndCountAll({
     attributes: {
       exclude: [
         "password_hash",
@@ -504,6 +561,8 @@ async function listCustomers(req, res) {
       ],
     },
     order: [["created_at", "DESC"]],
+    offset,
+    limit,
   });
 
   const bookings = await Booking.findAll();
@@ -526,9 +585,13 @@ async function listCustomers(req, res) {
         total_spent: Number(stats.spent.toFixed(2)),
       };
     }),
-    total: customers.length,
-    page: 1,
-    limit: customers.length || 10,
+    total: count,
+    page,
+    limit,
+    totalRecords: count,
+    totalPages: Math.max(Math.ceil(count / limit), 1),
+    currentPage: page,
+    pageSize: limit,
   });
 }
 
